@@ -5,7 +5,6 @@ RUN apk update \
 
 WORKDIR /run
 
-COPY ./controller .
-COPY ./manifest.json .
+COPY ./aux-service .
 
-CMD ["./controller"]
+CMD ["./aux-service "]

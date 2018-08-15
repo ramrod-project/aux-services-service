@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/docker/docker/client"
 
@@ -206,18 +207,39 @@ var AuxNetConfig = network.NetworkingConfig{
 var AuxContainerName = "aux-services"
 
 // SignalCatcher
-func SignalCatcher(sigc chan os.Signal) {
+func SignalCatcher(sigc chan os.Signal, id string) {
+	timeout := 3 * time.Second
+	ctx, cancel := context.WithCancel(context.Background())
+	dockerClient, err := client.NewEnvClient()
+	if err != nil {
+		panic(err)
+	}
+
 	s := <-sigc
 	switch s {
 	case syscall.SIGTERM:
 		log.Printf("handle SIGTERM")
+		err := dockerClient.ContainerStop(ctx, id, &timeout)
+		if err != nil {
+			log.Printf("%v", err)
+		}
 	case syscall.SIGKILL:
 		log.Printf("handle SIGKILL")
+		err := dockerClient.ContainerKill(ctx, id, "SIGKILL")
+		if err != nil {
+			log.Printf("%v", err)
+		}
 	case syscall.SIGINT:
 		log.Printf("handle SIGINT")
+		err := dockerClient.ContainerStop(ctx, id, &timeout)
+		if err != nil {
+			log.Printf("%v", err)
+		}
 	default:
-		log.Printf("signal %v not handled", s)
+		break
 	}
+
+	cancel()
 	close(sigc)
 	os.Exit(0)
 }
@@ -243,7 +265,7 @@ func MonitorAux(ctx context.Context) <-chan error {
 			case "start":
 				log.Printf("Aux services started")
 			case "stop":
-				log.Printf("Aux services stop")
+				log.Printf("Aux services stopped")
 			case "kill":
 				log.Printf("Aux services kill")
 			case "die":

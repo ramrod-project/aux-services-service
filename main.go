@@ -13,12 +13,6 @@ import (
 )
 
 func main() {
-	// Config and start goroutine to handle sigterm/kill
-	// On sigterm/kill, stop/kill the aux services container
-	sigc := make(chan os.Signal, 1)
-	signal.Notify(sigc, syscall.SIGTERM, syscall.SIGKILL, syscall.SIGINT)
-	go auxservice.SignalCatcher(sigc)
-
 	// Initialize context and docker client
 	ctx, cancel := context.WithCancel(context.Background())
 	dockerClient, err := client.NewEnvClient()
@@ -47,6 +41,11 @@ func main() {
 		panic(err)
 	}
 	log.Printf("Container created...")
+
+	// On sigterm/kill, stop/kill the aux services container
+	sigc := make(chan os.Signal, 1)
+	signal.Notify(sigc, syscall.SIGTERM, syscall.SIGKILL, syscall.SIGINT)
+	go auxservice.SignalCatcher(sigc, con.ID)
 
 	// Start aux services container
 	err = dockerClient.ContainerStart(ctx, con.ID, types.ContainerStartOptions{})
