@@ -23,6 +23,21 @@ import (
 	"github.com/docker/go-connections/nat"
 )
 
+var defaultEnvs = map[string]string{
+	"LOGLEVEL": "DEBUG",
+	"STAGE":    "DEV",
+}
+
+func concatString(k string, sep string, v string) string {
+	var stringBuf bytes.Buffer
+
+	stringBuf.WriteString(k)
+	stringBuf.WriteString(sep)
+	stringBuf.WriteString(v)
+
+	return stringBuf.String()
+}
+
 var Net = func() types.NetworkResource {
 	ctx, cancel := context.WithCancel(context.Background())
 	dockerClient, err := client.NewEnvClient()
@@ -38,26 +53,14 @@ var Net = func() types.NetworkResource {
 	nets, err := dockerClient.NetworkList(ctx, types.NetworkListOptions{
 		Filters: netFilter,
 	})
-	if err != nil || len(nets) != 1 {
+	if err != nil {
 		panic(err)
 	}
-	return nets[0]
+	if len(nets) == 1 {
+		return nets[0]
+	}
+	return types.NetworkResource{}
 }()
-
-var defaultEnvs = map[string]string{
-	"LOGLEVEL": "DEBUG",
-	"STAGE":    "DEV",
-}
-
-func concatString(k string, sep string, v string) string {
-	var stringBuf bytes.Buffer
-
-	stringBuf.WriteString(k)
-	stringBuf.WriteString(sep)
-	stringBuf.WriteString(v)
-
-	return stringBuf.String()
-}
 
 func getEnvByKey(k string) string {
 	var env string
