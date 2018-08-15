@@ -1,5 +1,8 @@
 package auxservice
 
+// TODO:
+// - refine container death handling with CONTEXT
+
 import (
 	"bytes"
 	"context"
