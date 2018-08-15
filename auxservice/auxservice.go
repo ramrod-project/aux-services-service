@@ -163,9 +163,6 @@ var AuxContainerConfig = container.Config{
 
 // AuxHostConfig
 var AuxHostConfig = container.HostConfig{
-	/*Binds: []string{
-		"brain-volume:/www/files/brain",
-	},*/
 	NetworkMode: "default",
 	PortBindings: getPortMap(
 		getIP(),
@@ -176,9 +173,6 @@ var AuxHostConfig = container.HostConfig{
 			[]string{"udp", "53"},
 		}),
 	),
-	RestartPolicy: container.RestartPolicy{
-		MaximumRetryCount: 3,
-	},
 	AutoRemove:  true,
 	CapAdd:      strslice.StrSlice{"SYS_ADMIN"},
 	SecurityOpt: []string{"apparmor:unconfined"},
@@ -258,20 +252,25 @@ func MonitorAux(ctx context.Context) <-chan error {
 		},
 	)
 	go func() {
+	L:
 		for e := range events {
 			switch e.Status {
 			case "create":
 				log.Printf("Aux services created")
 			case "start":
 				log.Printf("Aux services started")
-			case "stop":
-				log.Printf("Aux services stopped")
 			case "kill":
-				log.Printf("Aux services kill")
+				log.Printf("Container kill, dying...")
+				break L
+			case "stop":
+				log.Printf("Container stop, dying...")
+				break L
 			case "die":
-				log.Printf("Aux services dead")
+				log.Printf("Container dead, dying...")
+				break L
 			}
 		}
+		os.Exit(1)
 	}()
 	return errs
 }
