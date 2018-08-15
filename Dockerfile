@@ -7,4 +7,4 @@ WORKDIR /run
 
 COPY ./aux-service .
 
-CMD ["./aux-service "]
+CMD ["./aux-service"]
