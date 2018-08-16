@@ -209,7 +209,7 @@ func SignalCatcher(sigc <-chan os.Signal, id string) <-chan struct{} {
 	signaller := make(chan struct{})
 
 	go func() {
-		timeout := 3 * time.Second
+		timeout := 1 * time.Second
 		ctx, cancel := context.WithCancel(context.Background())
 		dockerClient, err := client.NewEnvClient()
 		if err != nil {
@@ -236,10 +236,9 @@ func SignalCatcher(sigc <-chan os.Signal, id string) <-chan struct{} {
 			if err != nil {
 				log.Printf("%v", err)
 			}
-		default:
-			break
 		}
 		cancel()
+		log.Printf("Sending service kill signal")
 		signaller <- struct{}{}
 	}()
 
@@ -269,12 +268,6 @@ func MonitorAux(ctx context.Context) (<-chan struct{}, <-chan error) {
 				log.Printf("Aux services created")
 			case "start":
 				log.Printf("Aux services started")
-			case "kill":
-				log.Printf("Container kill, dying...")
-				break L
-			case "stop":
-				log.Printf("Container stop, dying...")
-				break L
 			case "die":
 				log.Printf("Container dead, dying...")
 				break L

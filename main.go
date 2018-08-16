@@ -50,8 +50,6 @@ func main() {
 	// torn down by the docker daemon
 	sigService := auxservice.SignalCatcher(sigc, con.ID)
 
-	log.Printf("Net config: %+v", auxservice.AuxNetConfig)
-
 	// Start aux services container
 	err = dockerClient.ContainerStart(ctx, con.ID, types.ContainerStartOptions{})
 	if err != nil {
