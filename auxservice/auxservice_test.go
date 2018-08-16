@@ -13,10 +13,10 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
+	"github.com/ramrod-project/aux-services-service/test"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -395,61 +395,6 @@ func Test_getArgs(t *testing.T) {
 	}
 }
 
-func StartAux(ctx context.Context, dockerClient *client.Client) (container.ContainerCreateCreatedBody, error) {
-	con, err := dockerClient.ContainerCreate(
-		ctx,
-		&AuxContainerConfig,
-		&AuxHostConfig,
-		&AuxNetConfig,
-		AuxContainerName,
-	)
-	if err != nil {
-		log.Printf("Container create error")
-		return container.ContainerCreateCreatedBody{}, err
-	}
-	err = dockerClient.ContainerStart(ctx, con.ID, types.ContainerStartOptions{})
-	if err != nil {
-		return container.ContainerCreateCreatedBody{}, err
-	}
-	return con, nil
-}
-
-func KillAux(ctx context.Context, dockerClient *client.Client, id string) error {
-	start := time.Now()
-	var err error
-	for time.Since(start) < 10*time.Second {
-		err = dockerClient.ContainerKill(ctx, id, "SIGKILL")
-		if err == nil {
-			return nil
-		}
-	}
-	return err
-}
-
-func KillNet(netid string) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	dockerClient, err := client.NewEnvClient()
-	if err != nil {
-		panic(err)
-	}
-
-	defer cancel()
-
-	start := time.Now()
-	for time.Since(start) < 10*time.Second {
-		dockerClient.NetworkRemove(ctx, netid)
-		time.Sleep(time.Second)
-		_, err := dockerClient.NetworkInspect(ctx, netid)
-		if err != nil {
-			_, err := dockerClient.NetworksPrune(ctx, filters.Args{})
-			if err == nil {
-				return nil
-			}
-		}
-	}
-	return errors.New("couldn't clean up networks")
-}
-
 func TestCheckForAux(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -525,8 +470,8 @@ func TestCheckForAux(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
-	KillAux(ctx, dockerClient, conid)
-	err = KillNet(netRes.ID)
+	test.KillAux(ctx, dockerClient, conid)
+	err = test.KillNet(netRes.ID)
 	if err != nil {
 		t.Errorf("%v", err)
 	}
@@ -641,8 +586,8 @@ func TestMonitorAux(t *testing.T) {
 		})
 	}
 
-	KillAux(ctx, dockerClient, con.ID)
-	err = KillNet(netRes.ID)
+	test.KillAux(ctx, dockerClient, con.ID)
+	err = test.KillNet(netRes.ID)
 	if err != nil {
 		t.Errorf("%v", err)
 	}
@@ -716,10 +661,10 @@ func TestSignalCatcher(t *testing.T) {
 				t.Errorf("should have cancelled test context")
 			}
 
-			KillAux(ctx, dockerClient, con.ID)
+			test.KillAux(ctx, dockerClient, con.ID)
 		})
 	}
-	err = KillNet(netRes.ID)
+	err = test.KillNet(netRes.ID)
 	if err != nil {
 		t.Errorf("%v", err)
 	}
