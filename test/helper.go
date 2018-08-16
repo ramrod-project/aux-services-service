@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/docker/docker/api/types"
@@ -16,6 +17,90 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/ramrod-project/aux-services-service/auxservice"
 )
+
+func waitForStart(id string) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	dockerClient, err := client.NewEnvClient()
+
+	if err != nil {
+		return err
+	}
+	defer cancel()
+	start := time.Now()
+	for time.Since(start) < 15*time.Second {
+		_, _, err := dockerClient.ServiceInspectWithRaw(ctx, id)
+		if err == nil {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	for time.Since(start) < 15*time.Second {
+		conid := getAuxID()
+		if conid != "" {
+			insp, err := dockerClient.ContainerInspect(ctx, conid)
+			if err == nil && insp.State.Status == "running" {
+				return nil
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return errors.New("aux not starting in time")
+}
+
+func waitForStop(id string) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	dockerClient, err := client.NewEnvClient()
+
+	if err != nil {
+		return err
+	}
+	defer cancel()
+	start := time.Now()
+	for time.Since(start) < 15*time.Second {
+		_, _, err := dockerClient.ServiceInspectWithRaw(ctx, id)
+		if err != nil {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	for time.Since(start) < 15*time.Second {
+		conid := getAuxID()
+		if conid != "" {
+			_, err := dockerClient.ContainerInspect(ctx, conid)
+			if err != nil {
+				return nil
+			}
+		} else {
+			return nil
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return errors.New("aux not starting in time")
+}
+
+func getAuxID() string {
+	ctx, cancel := context.WithCancel(context.Background())
+	dockerClient, err := client.NewEnvClient()
+	if err != nil {
+		return ""
+	}
+	defer cancel()
+
+	start := time.Now()
+	for time.Since(start) < 10*time.Second {
+		containers, err := dockerClient.ContainerList(ctx, types.ContainerListOptions{})
+		if err == nil {
+			for _, c := range containers {
+				split := strings.Split(c.Names[0], "/")
+				if split[len(split)-1] == "aux-services" {
+					return c.ID
+				}
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return ""
+}
 
 func getImage(image string) string {
 	var stringBuf bytes.Buffer
@@ -134,7 +219,7 @@ func StartAuxService(ctx context.Context, dockerClient *client.Client, spec swar
 	if err != nil {
 		return "", err
 	}
-	return result.ID, nil
+	return result.ID, waitForStart(result.ID)
 }
 
 // KillAux
@@ -175,7 +260,7 @@ func KillNet(netid string) error {
 	return errors.New("couldn't clean up networks")
 }
 
-func KillAuxService(ctx context.Context, dockerClient *client.Client, svcID string) {
+func KillAuxService(ctx context.Context, dockerClient *client.Client, svcID string) error {
 	start := time.Now()
 	for time.Since(start) < 10*time.Second {
 		err := dockerClient.ServiceRemove(ctx, svcID)
@@ -199,4 +284,5 @@ func KillAuxService(ctx context.Context, dockerClient *client.Client, svcID stri
 		}
 		time.Sleep(time.Second)
 	}
+	return waitForStop(svcID)
 }
