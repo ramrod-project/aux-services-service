@@ -2,6 +2,7 @@ package auxservice
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net"
 	"os"
@@ -491,7 +492,8 @@ func TestMonitorAux(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	dockerClient, err := client.NewEnvClient()
 	if err != nil {
-		panic(err)
+		t.Errorf("%v", err)
+		return
 	}
 
 	defer cancel()
@@ -540,20 +542,57 @@ func TestMonitorAux(t *testing.T) {
 		return
 	}
 
-	type args struct {
-		ctx context.Context
-	}
 	tests := []struct {
-		name string
-		args args
-		want <-chan error
+		name    string
+		res     struct{}
+		wantErr bool
+		err     error
 	}{
-		// TODO: Add test cases.
+		{
+			name:    "cancel context",
+			wantErr: true,
+			err:     errors.New("context canceled"),
+		},
+		{
+			name: "container dead",
+			res:  struct{}{},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := MonitorAux(tt.args.ctx); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("MonitorAux() = %v, want %v", got, tt.want)
+			newCtx, cancel := context.WithCancel(context.Background())
+			sig, err := MonitorAux(newCtx)
+
+			timeoutCtx, cancelTimeout := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancelTimeout()
+
+			if tt.wantErr {
+				cancel()
+				select {
+				case <-timeoutCtx.Done():
+					t.Errorf("err %v not received", tt.err)
+					assert.True(t, false)
+					return
+				case e := <-err:
+					assert.Equal(t, tt.err, e)
+				}
+			} else {
+				defer cancel()
+
+				err := dockerClient.ContainerKill(ctx, con.ID, "SIGKILL")
+				if err != nil {
+					t.Errorf("error killing container: %v", err)
+					return
+				}
+
+				select {
+				case <-timeoutCtx.Done():
+					t.Errorf("signal not received")
+					assert.True(t, false)
+					return
+				case r := <-sig:
+					assert.Equal(t, tt.res, r)
+				}
 			}
 		})
 	}
@@ -565,7 +604,7 @@ func TestMonitorAux(t *testing.T) {
 	}
 }
 
-func TestSignalCatcher(t *testing.T) {
+/*func TestSignalCatcher(t *testing.T) {
 
 	type args struct {
 		sigc chan os.Signal
@@ -582,4 +621,4 @@ func TestSignalCatcher(t *testing.T) {
 			SignalCatcher(tt.args.sigc, tt.args.id)
 		})
 	}
-}
+}*/
