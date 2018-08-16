@@ -2,6 +2,7 @@ package auxservice
 
 import (
 	"context"
+	"net"
 	"os"
 	"reflect"
 	"strings"
@@ -215,17 +216,48 @@ func Test_getPortSet(t *testing.T) {
 }
 
 func Test_getIP(t *testing.T) {
+
+	var (
+		ips []string
+	)
+
+	// get local interfaces from node
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+	for _, i := range ifaces {
+		addrs, err := i.Addrs()
+		if err != nil {
+			t.Errorf("%v", err)
+			return
+		}
+		for _, addr := range addrs {
+			ips = append(ips, strings.Split(addr.String(), "/")[0])
+		}
+	}
+
 	tests := []struct {
 		name string
-		want string
+		want []string
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Get IP",
+			want: ips,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := getIP(); got != tt.want {
-				t.Errorf("getIP() = %v, want %v", got, tt.want)
+			got := getIP()
+			found := false
+			for _, ip := range tt.want {
+				if ip == got {
+					found = true
+					break
+				}
 			}
+			assert.True(t, found)
 		})
 	}
 }
