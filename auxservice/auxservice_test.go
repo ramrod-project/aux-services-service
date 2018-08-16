@@ -2,13 +2,17 @@ package auxservice
 
 import (
 	"context"
+	"log"
 	"net"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 	"github.com/stretchr/testify/assert"
 )
@@ -388,21 +392,97 @@ func Test_getArgs(t *testing.T) {
 	}
 }
 
-func TestSignalCatcher(t *testing.T) {
+func killAux(ctx context.Context, dockerClient *client.Client, id string) error {
+	start := time.Now()
+	var err error
+	for time.Since(start) < 10*time.Second {
+		err = dockerClient.ContainerKill(ctx, id, "SIGKILL")
+		if err == nil {
+			return nil
+		}
+	}
+	return err
+}
+
+func TestCheckForAux(t *testing.T) {
+
+	ctx, cancel := context.WithCancel(context.Background())
+	dockerClient, err := client.NewEnvClient()
+	if err != nil {
+		panic(err)
+	}
+
+	defer cancel()
+
+	_, err = dockerClient.NetworkCreate(ctx, "pcp", types.NetworkCreate{
+		Driver:     "overlay",
+		Attachable: true,
+	})
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	var conid string
+
 	type args struct {
-		sigc chan os.Signal
-		id   string
+		c context.Context
 	}
 	tests := []struct {
-		name string
-		args args
+		name  string
+		start bool
+		args  args
+		want  string
 	}{
-		// TODO: Add test cases.
+		{
+			name:  "isnt there",
+			start: false,
+			args: args{
+				c: ctx,
+			},
+			want: "",
+		},
+		{
+			name:  "is there",
+			start: false,
+			args: args{
+				c: ctx,
+			},
+			want: "",
+		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			SignalCatcher(tt.args.sigc, tt.args.id)
+			if tt.start {
+				con, err := dockerClient.ContainerCreate(
+					ctx,
+					&AuxContainerConfig,
+					&AuxHostConfig,
+					&AuxNetConfig,
+					AuxContainerName,
+				)
+				conid = con.ID
+				tt.want = conid
+				if err != nil {
+					log.Printf("Container create error")
+					t.Errorf("%v", err)
+					return
+				}
+				err = dockerClient.ContainerStart(ctx, con.ID, types.ContainerStartOptions{})
+				if err != nil {
+					t.Errorf("%v", err)
+					return
+				}
+			}
+			got := CheckForAux(ctx)
+			assert.Equal(t, tt.want, got)
 		})
+	}
+	killAux(ctx, dockerClient, conid)
+	_, err = dockerClient.NetworksPrune(ctx, filters.Args{})
+	if err != nil {
+		t.Errorf("%v", err)
 	}
 }
 
@@ -426,22 +506,21 @@ func TestMonitorAux(t *testing.T) {
 	}
 }
 
-func TestCheckForAux(t *testing.T) {
+func TestSignalCatcher(t *testing.T) {
+
 	type args struct {
-		ctx context.Context
+		sigc chan os.Signal
+		id   string
 	}
 	tests := []struct {
 		name string
 		args args
-		want string
 	}{
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := CheckForAux(tt.args.ctx); got != tt.want {
-				t.Errorf("CheckForAux() = %v, want %v", got, tt.want)
-			}
+			SignalCatcher(tt.args.sigc, tt.args.id)
 		})
 	}
 }
