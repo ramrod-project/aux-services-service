@@ -272,7 +272,85 @@ func Test_getPortMap(t *testing.T) {
 		args args
 		want nat.PortMap
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Normal 1",
+			args: args{
+				ip: "192.168.1.1",
+				ports: []nat.Port{
+					"1000/tcp",
+				},
+			},
+			want: nat.PortMap{
+				"1000/tcp": []nat.PortBinding{
+					nat.PortBinding{
+						HostIP:   "192.168.1.1",
+						HostPort: "1000",
+					},
+				},
+			},
+		},
+		{
+			name: "Normal 2",
+			args: args{
+				ip: "192.168.1.2",
+				ports: []nat.Port{
+					"999/udp",
+				},
+			},
+			want: nat.PortMap{
+				"999/udp": []nat.PortBinding{
+					nat.PortBinding{
+						HostIP:   "192.168.1.2",
+						HostPort: "999",
+					},
+				},
+			},
+		},
+		{
+			name: "Complex",
+			args: args{
+				ip: "10.0.0.4",
+				ports: []nat.Port{
+					"999/udp",
+					"1000/tcp",
+					"1001/udp",
+					"1002/tcp",
+					"666/udp",
+				},
+			},
+			want: nat.PortMap{
+				"999/udp": []nat.PortBinding{
+					nat.PortBinding{
+						HostIP:   "10.0.0.4",
+						HostPort: "999",
+					},
+				},
+				"1000/tcp": []nat.PortBinding{
+					nat.PortBinding{
+						HostIP:   "10.0.0.4",
+						HostPort: "1000",
+					},
+				},
+				"1001/udp": []nat.PortBinding{
+					nat.PortBinding{
+						HostIP:   "10.0.0.4",
+						HostPort: "1001",
+					},
+				},
+				"1002/tcp": []nat.PortBinding{
+					nat.PortBinding{
+						HostIP:   "10.0.0.4",
+						HostPort: "1002",
+					},
+				},
+				"666/udp": []nat.PortBinding{
+					nat.PortBinding{
+						HostIP:   "10.0.0.4",
+						HostPort: "666",
+					},
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
