@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"testing"
@@ -52,7 +53,7 @@ func Test_Integration(t *testing.T) {
 			},
 			wait: func(t *testing.T, timeout time.Duration) bool {
 				var (
-					foundAux, startAux, runAux bool = false, true, true
+					foundAux, startAux, runAux bool = false, false, false
 					targetContainer            string
 				)
 
@@ -97,6 +98,81 @@ func Test_Integration(t *testing.T) {
 					}
 				})
 
+				auxStarted := timoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
+					dc, err := client.NewEnvClient()
+					if err != nil {
+						t.Errorf("%v", err)
+						return false
+					}
+					cntxt := args[0].(context.Context)
+					eventChan, errChan := dc.Events(cntxt, types.EventsOptions{})
+
+					for {
+						select {
+						case <-cntxt.Done():
+							return false
+						case e := <-errChan:
+							log.Println(fmt.Errorf("%v", e))
+							return false
+						case e := <-eventChan:
+							log.Printf("event: %v", e)
+							if e.Type != "container" {
+								break
+							}
+							if e.Action != "start" {
+								break
+							}
+							if v, ok := e.Actor.Attributes["name"]; ok {
+								if v != "aux-services" {
+									break
+								}
+							} else {
+								break
+							}
+							targetContainer = e.Actor.ID
+							return true
+						}
+						time.Sleep(100 * time.Millisecond)
+					}
+				})
+
+				auxRunning := timoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
+					dc, err := client.NewEnvClient()
+					if err != nil {
+						t.Errorf("%v", err)
+						return false
+					}
+					cntxt := args[0].(context.Context)
+
+					resChan := func(ctx context.Context, d *client.Client) <-chan struct{} {
+						r := make(chan struct{})
+						go func() {
+							for {
+								insp, err := d.ContainerInspect(ctx, targetContainer)
+								if err == nil {
+									if insp.State.Status == "running" {
+										r <- struct{}{}
+									}
+								} else if err == errors.New("context canceled") {
+									close(r)
+									return
+								}
+								time.Sleep(100 * time.Millisecond)
+							}
+						}()
+						return r
+					}(cntxt, dc)
+
+					for {
+						select {
+						case <-cntxt.Done():
+							return false
+						case <-resChan:
+							return true
+						}
+					}
+				})
+
 				defer cancel()
 
 				// for loop that iterates until context <-Done()
@@ -112,6 +188,16 @@ func Test_Integration(t *testing.T) {
 						if v {
 							log.Printf("Setting foundAux to %v", v)
 							foundAux = v
+						}
+					case v := <-auxStarted:
+						if v {
+							log.Printf("Setting startAux to %v", v)
+							startAux = v
+						}
+					case v := <-auxRunning:
+						if v {
+							log.Printf("Setting runAux to %v", v)
+							runAux = v
 						}
 					default:
 						break
