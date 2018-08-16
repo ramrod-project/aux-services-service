@@ -8,10 +8,12 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
@@ -393,7 +395,26 @@ func Test_getArgs(t *testing.T) {
 	}
 }
 
-func killAux(ctx context.Context, dockerClient *client.Client, id string) error {
+func StartAux(ctx context.Context, dockerClient *client.Client) (container.ContainerCreateCreatedBody, error) {
+	con, err := dockerClient.ContainerCreate(
+		ctx,
+		&AuxContainerConfig,
+		&AuxHostConfig,
+		&AuxNetConfig,
+		AuxContainerName,
+	)
+	if err != nil {
+		log.Printf("Container create error")
+		return container.ContainerCreateCreatedBody{}, err
+	}
+	err = dockerClient.ContainerStart(ctx, con.ID, types.ContainerStartOptions{})
+	if err != nil {
+		return container.ContainerCreateCreatedBody{}, err
+	}
+	return con, nil
+}
+
+func KillAux(ctx context.Context, dockerClient *client.Client, id string) error {
 	start := time.Now()
 	var err error
 	for time.Since(start) < 10*time.Second {
@@ -403,6 +424,30 @@ func killAux(ctx context.Context, dockerClient *client.Client, id string) error 
 		}
 	}
 	return err
+}
+
+func KillNet(netid string) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	dockerClient, err := client.NewEnvClient()
+	if err != nil {
+		panic(err)
+	}
+
+	defer cancel()
+
+	start := time.Now()
+	for time.Since(start) < 10*time.Second {
+		dockerClient.NetworkRemove(ctx, netid)
+		time.Sleep(time.Second)
+		_, err := dockerClient.NetworkInspect(ctx, netid)
+		if err != nil {
+			_, err := dockerClient.NetworksPrune(ctx, filters.Args{})
+			if err == nil {
+				return nil
+			}
+		}
+	}
+	return errors.New("couldn't clean up networks")
 }
 
 func TestCheckForAux(t *testing.T) {
@@ -415,7 +460,7 @@ func TestCheckForAux(t *testing.T) {
 
 	defer cancel()
 
-	_, err = dockerClient.NetworkCreate(ctx, "pcp", types.NetworkCreate{
+	netRes, err := dockerClient.NetworkCreate(ctx, "pcp", types.NetworkCreate{
 		Driver:     "overlay",
 		Attachable: true,
 	})
@@ -480,8 +525,8 @@ func TestCheckForAux(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
-	killAux(ctx, dockerClient, conid)
-	_, err = dockerClient.NetworksPrune(ctx, filters.Args{})
+	KillAux(ctx, dockerClient, conid)
+	err = KillNet(netRes.ID)
 	if err != nil {
 		t.Errorf("%v", err)
 	}
@@ -491,14 +536,13 @@ func TestMonitorAux(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	dockerClient, err := client.NewEnvClient()
+	defer cancel()
 	if err != nil {
 		t.Errorf("%v", err)
 		return
 	}
 
-	defer cancel()
-
-	_, err = dockerClient.NetworkCreate(ctx, "pcp", types.NetworkCreate{
+	netRes, err := dockerClient.NetworkCreate(ctx, "pcp", types.NetworkCreate{
 		Driver:     "overlay",
 		Attachable: true,
 	})
@@ -597,28 +641,86 @@ func TestMonitorAux(t *testing.T) {
 		})
 	}
 
-	killAux(ctx, dockerClient, con.ID)
-	_, err = dockerClient.NetworksPrune(ctx, filters.Args{})
+	KillAux(ctx, dockerClient, con.ID)
+	err = KillNet(netRes.ID)
 	if err != nil {
 		t.Errorf("%v", err)
 	}
 }
 
-/*func TestSignalCatcher(t *testing.T) {
+func TestSignalCatcher(t *testing.T) {
 
-	type args struct {
-		sigc chan os.Signal
-		id   string
+	ctx, cancel := context.WithCancel(context.Background())
+	dockerClient, err := client.NewEnvClient()
+	defer cancel()
+	if err != nil {
+		t.Errorf("%v", err)
+		return
 	}
+
+	netRes, err := dockerClient.NetworkCreate(ctx, "pcp", types.NetworkCreate{
+		Driver:     "overlay",
+		Attachable: true,
+	})
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
 	tests := []struct {
 		name string
-		args args
+		sig  syscall.Signal
 	}{
-		// TODO: Add test cases.
+		{
+			name: "SIGTERM",
+			sig:  syscall.SIGTERM,
+		},
+		{
+			name: "SIGKILL",
+			sig:  syscall.SIGKILL,
+		},
+		{
+			name: "SIGINT",
+			sig:  syscall.SIGINT,
+		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			SignalCatcher(tt.args.sigc, tt.args.id)
+			con, err := StartAux(ctx, dockerClient)
+			if err != nil {
+				t.Errorf("%v", err)
+			}
+
+			testCtx, testCancel := context.WithCancel(context.Background())
+			defer testCancel()
+
+			sigSend := make(chan os.Signal)
+			sigRecv := SignalCatcher(sigSend, testCancel, con.ID)
+
+			timeoutCtx, timeoutCancel := context.WithTimeout(context.Background(), 6*time.Second)
+			defer timeoutCancel()
+
+			sigSend <- tt.sig
+			select {
+			case <-timeoutCtx.Done():
+				t.Errorf("should have received signal")
+			case s := <-sigRecv:
+				assert.IsType(t, struct{}{}, s)
+			}
+
+			select {
+			case <-testCtx.Done():
+				assert.True(t, true)
+			case <-timeoutCtx.Done():
+				t.Errorf("should have cancelled test context")
+			}
+
+			KillAux(ctx, dockerClient, con.ID)
 		})
 	}
-}*/
+	err = KillNet(netRes.ID)
+	if err != nil {
+		t.Errorf("%v", err)
+	}
+}

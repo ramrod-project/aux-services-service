@@ -1,7 +1,6 @@
 package auxservice
 
 // TODO:
-// - refine container death handling with CONTEXT
 
 import (
 	"bytes"
@@ -209,7 +208,8 @@ func SignalCatcher(sigc <-chan os.Signal, sigCancel context.CancelFunc, id strin
 	signaller := make(chan struct{})
 
 	go func() {
-		timeout := 1 * time.Second
+		timeout := 3 * time.Second
+
 		ctx, cancel := context.WithCancel(context.Background())
 		dockerClient, err := client.NewEnvClient()
 		if err != nil {
