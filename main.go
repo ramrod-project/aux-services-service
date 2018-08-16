@@ -46,9 +46,14 @@ func main() {
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, syscall.SIGTERM, syscall.SIGKILL, syscall.SIGINT)
 
+	// Shared context, cancelled when the service is removed
+	// This prevents a race condition between the aux service
+	// container monitor and the service monitor.
+	sigContext, sigCancel := context.WithCancel(context.Background())
+
 	// sigService channel will be populated if the service is
 	// torn down by the docker daemon
-	sigService := auxservice.SignalCatcher(sigc, con.ID)
+	sigService := auxservice.SignalCatcher(sigc, sigCancel, con.ID)
 
 	// Start aux services container
 	err = dockerClient.ContainerStart(ctx, con.ID, types.ContainerStartOptions{})
@@ -60,7 +65,7 @@ func main() {
 
 	// sigAux channel will be populated if the aux services container
 	// dies
-	sigAux, errs := auxservice.MonitorAux(ctx)
+	sigAux, errs := auxservice.MonitorAux(sigContext)
 
 	go func(sigS <-chan struct{}, sigA <-chan struct{}) {
 		select {

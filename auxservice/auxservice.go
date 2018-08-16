@@ -205,7 +205,7 @@ var AuxNetConfig = network.NetworkingConfig{
 var AuxContainerName = "aux-services"
 
 // SignalCatcher
-func SignalCatcher(sigc <-chan os.Signal, id string) <-chan struct{} {
+func SignalCatcher(sigc <-chan os.Signal, sigCancel context.CancelFunc, id string) <-chan struct{} {
 	signaller := make(chan struct{})
 
 	go func() {
@@ -217,6 +217,7 @@ func SignalCatcher(sigc <-chan os.Signal, id string) <-chan struct{} {
 		}
 
 		s := <-sigc
+		sigCancel()
 		switch s {
 		case syscall.SIGTERM:
 			log.Printf("handle SIGTERM")
@@ -237,9 +238,10 @@ func SignalCatcher(sigc <-chan os.Signal, id string) <-chan struct{} {
 				log.Printf("%v", err)
 			}
 		}
-		cancel()
 		log.Printf("Sending service kill signal")
 		signaller <- struct{}{}
+		cancel()
+		return
 	}()
 
 	return signaller
@@ -262,18 +264,24 @@ func MonitorAux(ctx context.Context) (<-chan struct{}, <-chan error) {
 	)
 	go func() {
 	L:
-		for e := range events {
-			switch e.Status {
-			case "create":
-				log.Printf("Aux services created")
-			case "start":
-				log.Printf("Aux services started")
-			case "die":
-				log.Printf("Container dead, dying...")
-				break L
+		for {
+			select {
+			case e := <-events:
+				switch e.Status {
+				case "create":
+					log.Printf("Aux services created")
+				case "start":
+					log.Printf("Aux services started")
+				case "die":
+					log.Printf("Container dead, dying...")
+					break L
+				}
+			case <-ctx.Done():
+				return
 			}
 		}
 		signaller <- struct{}{}
+		return
 	}()
 	return signaller, errs
 }
