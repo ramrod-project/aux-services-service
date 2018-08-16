@@ -362,11 +362,22 @@ func Test_getPortMap(t *testing.T) {
 }
 
 func Test_getArgs(t *testing.T) {
+
+	f := filters.NewArgs()
+	f.Add(
+		"Type", "container",
+	)
+	f.Add(
+		"Actor.Attributes.name", AuxContainerName,
+	)
 	tests := []struct {
 		name string
 		want filters.Args
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Normal 1",
+			want: f,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
