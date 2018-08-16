@@ -45,7 +45,12 @@ func main() {
 	// On sigterm/kill, stop/kill the aux services container
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, syscall.SIGTERM, syscall.SIGKILL, syscall.SIGINT)
-	go auxservice.SignalCatcher(sigc, con.ID)
+
+	// sigService channel will be populated if the service is
+	// torn down by the docker daemon
+	sigService := auxservice.SignalCatcher(sigc, con.ID)
+
+	log.Printf("Net config: %+v", auxservice.AuxNetConfig)
 
 	// Start aux services container
 	err = dockerClient.ContainerStart(ctx, con.ID, types.ContainerStartOptions{})
@@ -55,11 +60,39 @@ func main() {
 	}
 	log.Printf("Container started...")
 
-	// Monitor events with filter https://godoc.org/github.com/docker/docker/api/types/filters
-	//     if the container dies, restart it
-	errs := auxservice.MonitorAux(ctx)
-	for e := range errs {
-		log.Printf("Error from monitor")
-		panic(e)
+	// sigAux channel will be populated if the aux services container
+	// dies
+	sigAux, errs := auxservice.MonitorAux(ctx)
+
+	go func(sigS <-chan struct{}, sigA <-chan struct{}) {
+		select {
+		case <-sigS:
+			log.Printf("Service remove signal.")
+			os.Exit(0)
+		case <-sigA:
+			log.Printf("Container dead, service dying...")
+			os.Exit(1)
+		}
+	}(sigService, sigAux)
+
+	// Monitor event errors
+	go func() {
+		for e := range errs {
+			log.Printf("Error from monitor: %v", e)
+		}
+	}()
+
+	// Monitors the signal channels.
+	// and will cause the process to exit if either the
+	// service is removed or the aux container dies
+	// (Exit code 1 tells docker daemon to restart
+	// the service).
+	select {
+	case <-sigService:
+		log.Printf("Service remove signal.")
+		os.Exit(0)
+	case <-sigAux:
+		log.Printf("Container dead, service dying...")
+		os.Exit(1)
 	}
 }

@@ -205,45 +205,51 @@ var AuxNetConfig = network.NetworkingConfig{
 var AuxContainerName = "aux-services"
 
 // SignalCatcher
-func SignalCatcher(sigc chan os.Signal, id string) {
-	timeout := 3 * time.Second
-	ctx, cancel := context.WithCancel(context.Background())
-	dockerClient, err := client.NewEnvClient()
-	if err != nil {
-		panic(err)
-	}
+func SignalCatcher(sigc <-chan os.Signal, id string) <-chan struct{} {
+	signaller := make(chan struct{})
 
-	s := <-sigc
-	switch s {
-	case syscall.SIGTERM:
-		log.Printf("handle SIGTERM")
-		err := dockerClient.ContainerStop(ctx, id, &timeout)
+	go func() {
+		timeout := 3 * time.Second
+		ctx, cancel := context.WithCancel(context.Background())
+		dockerClient, err := client.NewEnvClient()
 		if err != nil {
-			log.Printf("%v", err)
+			panic(err)
 		}
-	case syscall.SIGKILL:
-		log.Printf("handle SIGKILL")
-		err := dockerClient.ContainerKill(ctx, id, "SIGKILL")
-		if err != nil {
-			log.Printf("%v", err)
-		}
-	case syscall.SIGINT:
-		log.Printf("handle SIGINT")
-		err := dockerClient.ContainerStop(ctx, id, &timeout)
-		if err != nil {
-			log.Printf("%v", err)
-		}
-	default:
-		break
-	}
 
-	cancel()
-	close(sigc)
-	os.Exit(0)
+		s := <-sigc
+		switch s {
+		case syscall.SIGTERM:
+			log.Printf("handle SIGTERM")
+			err := dockerClient.ContainerStop(ctx, id, &timeout)
+			if err != nil {
+				log.Printf("%v", err)
+			}
+		case syscall.SIGKILL:
+			log.Printf("handle SIGKILL")
+			err := dockerClient.ContainerKill(ctx, id, "SIGKILL")
+			if err != nil {
+				log.Printf("%v", err)
+			}
+		case syscall.SIGINT:
+			log.Printf("handle SIGINT")
+			err := dockerClient.ContainerStop(ctx, id, &timeout)
+			if err != nil {
+				log.Printf("%v", err)
+			}
+		default:
+			break
+		}
+		cancel()
+		signaller <- struct{}{}
+	}()
+
+	return signaller
 }
 
 // MonitorAux function
-func MonitorAux(ctx context.Context) <-chan error {
+func MonitorAux(ctx context.Context) (<-chan struct{}, <-chan error) {
+	signaller := make(chan struct{})
+
 	dockerClient, err := client.NewEnvClient()
 	if err != nil {
 		panic(err)
@@ -274,9 +280,9 @@ func MonitorAux(ctx context.Context) <-chan error {
 				break L
 			}
 		}
-		os.Exit(1)
+		signaller <- struct{}{}
 	}()
-	return errs
+	return signaller, errs
 }
 
 // CheckForAux
