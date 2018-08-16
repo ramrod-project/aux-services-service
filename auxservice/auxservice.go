@@ -76,9 +76,6 @@ func getEnvByKey(k string) string {
 func getTagFromEnv() string {
 	temp := os.Getenv("TAG")
 	if temp == "" {
-		temp = os.Getenv("TRAVIS_BRANCH")
-	}
-	if temp == "" {
 		temp = "latest"
 	}
 	return temp
@@ -89,7 +86,8 @@ func getPorts(in [][]string) []nat.Port {
 	for i, p := range in {
 		port, err := nat.NewPort(p[0], p[1])
 		if err != nil {
-			panic(err)
+			log.Printf("%v", err)
+			return []nat.Port{}
 		}
 		ports[i] = port
 	}

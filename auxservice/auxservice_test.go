@@ -4,10 +4,12 @@ import (
 	"context"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/go-connections/nat"
+	"github.com/stretchr/testify/assert"
 )
 
 func Test_concatString(t *testing.T) {
@@ -59,21 +61,33 @@ func Test_concatString(t *testing.T) {
 }
 
 func Test_getEnvByKey(t *testing.T) {
-	type args struct {
-		k string
-	}
 	tests := []struct {
 		name string
-		args args
+		k    string
 		want string
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Test env 1",
+			k:    "TEST1",
+			want: "TEST1=TEST1",
+		},
+		{
+			name: "Test env 2",
+			k:    "TEST2",
+			want: "TEST2=ghjstdgjhafhgjnysthy",
+		},
+		{
+			name: "Test empty",
+			k:    "ESAODUGHUQEWTR",
+			want: "ESAODUGHUQEWTR=",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := getEnvByKey(tt.args.k); got != tt.want {
-				t.Errorf("getEnvByKey() = %v, want %v", got, tt.want)
-			}
+			os.Setenv(tt.k, strings.Split(tt.want, "=")[1])
+			res := getEnvByKey(tt.k)
+			assert.Equal(t, tt.want, res)
+			os.Setenv(tt.k, "")
 		})
 	}
 }
@@ -83,31 +97,93 @@ func Test_getTagFromEnv(t *testing.T) {
 		name string
 		want string
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Dev",
+			want: "dev",
+		},
+		{
+			name: "Qa",
+			want: "qa",
+		},
+		{
+			name: "Latest",
+			want: "latest",
+		},
+		{
+			name: "None",
+			want: "latest",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := getTagFromEnv(); got != tt.want {
-				t.Errorf("getTagFromEnv() = %v, want %v", got, tt.want)
+			old := os.Getenv("TAG")
+			if tt.name == "None" {
+				os.Setenv("TAG", "")
+			} else {
+				os.Setenv("TAG", tt.want)
 			}
+			assert.Equal(t, tt.want, getTagFromEnv())
+			os.Setenv("TAG", old)
 		})
 	}
 }
 
 func Test_getPorts(t *testing.T) {
-	type args struct {
-		in [][]string
-	}
 	tests := []struct {
 		name string
-		args args
+		in   [][]string
 		want []nat.Port
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Normal tcp",
+			in: [][]string{
+				[]string{"tcp", "1000"},
+				[]string{"tcp", "2000"},
+				[]string{"tcp", "3000"},
+			},
+			want: []nat.Port{
+				"1000/tcp",
+				"2000/tcp",
+				"3000/tcp",
+			},
+		},
+		{
+			name: "Normal udp",
+			in: [][]string{
+				[]string{"udp", "1000"},
+				[]string{"udp", "2000"},
+				[]string{"udp", "3000"},
+			},
+			want: []nat.Port{
+				"1000/udp",
+				"2000/udp",
+				"3000/udp",
+			},
+		},
+		{
+			name: "Normal mix",
+			in: [][]string{
+				[]string{"udp", "1000"},
+				[]string{"tcp", "2000"},
+				[]string{"udp", "3000"},
+			},
+			want: []nat.Port{
+				"1000/udp",
+				"2000/tcp",
+				"3000/udp",
+			},
+		},
+		{
+			name: "Bad port",
+			in: [][]string{
+				[]string{"1000", "blah"},
+			},
+			want: []nat.Port{},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := getPorts(tt.args.in); !reflect.DeepEqual(got, tt.want) {
+			if got := getPorts(tt.in); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("getPorts() = %v, want %v", got, tt.want)
 			}
 		})
