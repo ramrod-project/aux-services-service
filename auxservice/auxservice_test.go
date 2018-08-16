@@ -195,7 +195,15 @@ func Test_getPortSet(t *testing.T) {
 		name string
 		want nat.PortSet
 	}{
-		// TODO: Add test cases.
+		{
+			name: "Normal 1",
+			want: nat.PortSet{
+				"20/tcp": struct{}{},
+				"21/tcp": struct{}{},
+				"80/tcp": struct{}{},
+				"53/udp": struct{}{},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
