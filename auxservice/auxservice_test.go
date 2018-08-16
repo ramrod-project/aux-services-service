@@ -487,6 +487,59 @@ func TestCheckForAux(t *testing.T) {
 }
 
 func TestMonitorAux(t *testing.T) {
+
+	ctx, cancel := context.WithCancel(context.Background())
+	dockerClient, err := client.NewEnvClient()
+	if err != nil {
+		panic(err)
+	}
+
+	defer cancel()
+
+	_, err = dockerClient.NetworkCreate(ctx, "pcp", types.NetworkCreate{
+		Driver:     "overlay",
+		Attachable: true,
+	})
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	con, err := dockerClient.ContainerCreate(
+		ctx,
+		&AuxContainerConfig,
+		&AuxHostConfig,
+		&AuxNetConfig,
+		AuxContainerName,
+	)
+	if err != nil {
+		log.Printf("Container create error")
+		t.Errorf("%v", err)
+		return
+	}
+	err = dockerClient.ContainerStart(ctx, con.ID, types.ContainerStartOptions{})
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	start := time.Now()
+	found := false
+	for time.Since(start) < 15*time.Second {
+		c, err := dockerClient.ContainerInspect(ctx, con.ID)
+		if err == nil {
+			if c.State.Status == "running" {
+				found = true
+				break
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if !found {
+		t.Errorf("container not started in timeout")
+		return
+	}
+
 	type args struct {
 		ctx context.Context
 	}
@@ -503,6 +556,12 @@ func TestMonitorAux(t *testing.T) {
 				t.Errorf("MonitorAux() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+
+	killAux(ctx, dockerClient, con.ID)
+	_, err = dockerClient.NetworksPrune(ctx, filters.Args{})
+	if err != nil {
+		t.Errorf("%v", err)
 	}
 }
 
