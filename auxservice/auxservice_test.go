@@ -16,7 +16,6 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
-	"github.com/ramrod-project/aux-services-service/test"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -470,8 +469,8 @@ func TestCheckForAux(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
-	test.KillAux(ctx, dockerClient, conid)
-	err = test.KillNet(netRes.ID)
+	KillAux(ctx, dockerClient, conid)
+	err = KillNet(netRes.ID)
 	if err != nil {
 		t.Errorf("%v", err)
 	}
@@ -586,8 +585,8 @@ func TestMonitorAux(t *testing.T) {
 		})
 	}
 
-	test.KillAux(ctx, dockerClient, con.ID)
-	err = test.KillNet(netRes.ID)
+	KillAux(ctx, dockerClient, con.ID)
+	err = KillNet(netRes.ID)
 	if err != nil {
 		t.Errorf("%v", err)
 	}
@@ -661,10 +660,10 @@ func TestSignalCatcher(t *testing.T) {
 				t.Errorf("should have cancelled test context")
 			}
 
-			test.KillAux(ctx, dockerClient, con.ID)
+			KillAux(ctx, dockerClient, con.ID)
 		})
 	}
-	err = test.KillNet(netRes.ID)
+	err = KillNet(netRes.ID)
 	if err != nil {
 		t.Errorf("%v", err)
 	}

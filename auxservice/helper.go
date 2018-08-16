@@ -1,4 +1,4 @@
-package test
+package auxservice
 
 import (
 	"bytes"
@@ -15,7 +15,6 @@ import (
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/swarm"
 	"github.com/docker/docker/client"
-	"github.com/ramrod-project/aux-services-service/auxservice"
 )
 
 func waitForStart(id string) error {
@@ -35,7 +34,7 @@ func waitForStart(id string) error {
 		time.Sleep(100 * time.Millisecond)
 	}
 	for time.Since(start) < 15*time.Second {
-		conid := getAuxID()
+		conid := GetAuxID()
 		if conid != "" {
 			insp, err := dockerClient.ContainerInspect(ctx, conid)
 			if err == nil && insp.State.Status == "running" {
@@ -64,7 +63,7 @@ func waitForStop(id string) error {
 		time.Sleep(100 * time.Millisecond)
 	}
 	for time.Since(start) < 15*time.Second {
-		conid := getAuxID()
+		conid := GetAuxID()
 		if conid != "" {
 			_, err := dockerClient.ContainerInspect(ctx, conid)
 			if err != nil {
@@ -78,7 +77,7 @@ func waitForStop(id string) error {
 	return errors.New("aux not starting in time")
 }
 
-func getAuxID() string {
+func GetAuxID() string {
 	ctx, cancel := context.WithCancel(context.Background())
 	dockerClient, err := client.NewEnvClient()
 	if err != nil {
@@ -131,7 +130,7 @@ func getEnvStage() string {
 	return stringBuf.String()
 }
 
-var auxServiceSpec = swarm.ServiceSpec{
+var AuxServiceSpec = swarm.ServiceSpec{
 	Annotations: swarm.Annotations{
 		Name: "AuxiliaryServices",
 	},
@@ -164,7 +163,7 @@ var auxServiceSpec = swarm.ServiceSpec{
 	},
 }
 
-func timoutTester(ctx context.Context, args []interface{}, f func(args ...interface{}) bool) <-chan bool {
+func TimeoutTester(ctx context.Context, args []interface{}, f func(args ...interface{}) bool) <-chan bool {
 	done := make(chan bool)
 
 	go func() {
@@ -196,10 +195,10 @@ func timoutTester(ctx context.Context, args []interface{}, f func(args ...interf
 func StartAux(ctx context.Context, dockerClient *client.Client) (container.ContainerCreateCreatedBody, error) {
 	con, err := dockerClient.ContainerCreate(
 		ctx,
-		&auxservice.AuxContainerConfig,
-		&auxservice.AuxHostConfig,
-		&auxservice.AuxNetConfig,
-		auxservice.AuxContainerName,
+		&AuxContainerConfig,
+		&AuxHostConfig,
+		&AuxNetConfig,
+		AuxContainerName,
 	)
 	if err != nil {
 		log.Printf("Container create error")

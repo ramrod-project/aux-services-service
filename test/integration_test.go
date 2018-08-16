@@ -10,6 +10,7 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
+	"github.com/ramrod-project/aux-services-service/auxservice"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -44,7 +45,7 @@ func Test_Integration(t *testing.T) {
 		{
 			name: "Startup",
 			run: func(t *testing.T) (string, bool) {
-				id, err := StartAuxService(ctx, dockerClient, auxServiceSpec)
+				id, err := auxservice.StartAuxService(ctx, dockerClient, auxservice.AuxServiceSpec)
 				if err != nil {
 					t.Errorf("%v", err)
 					return "", false
@@ -60,7 +61,7 @@ func Test_Integration(t *testing.T) {
 				// Initialize parent context (with timeout)
 				timeoutCtx, cancel := context.WithTimeout(context.Background(), timeout)
 
-				auxCreated := timoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
+				auxCreated := auxservice.TimeoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
 					dc, err := client.NewEnvClient()
 					if err != nil {
 						t.Errorf("%v", err)
@@ -97,7 +98,7 @@ func Test_Integration(t *testing.T) {
 					}
 				})
 
-				auxStarted := timoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
+				auxStarted := auxservice.TimeoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
 					dc, err := client.NewEnvClient()
 					if err != nil {
 						t.Errorf("%v", err)
@@ -134,7 +135,7 @@ func Test_Integration(t *testing.T) {
 					}
 				})
 
-				auxRunning := timoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
+				auxRunning := auxservice.TimeoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
 					dc, err := client.NewEnvClient()
 					if err != nil {
 						t.Errorf("%v", err)
@@ -225,12 +226,12 @@ func Test_Integration(t *testing.T) {
 		{
 			name: "Kill container",
 			run: func(t *testing.T) (string, bool) {
-				id, err := StartAuxService(ctx, dockerClient, auxServiceSpec)
+				id, err := auxservice.StartAuxService(ctx, dockerClient, auxservice.AuxServiceSpec)
 				if err != nil {
 					t.Errorf("%v", err)
 					return "", false
 				}
-				KillAux(ctx, dockerClient, getAuxID())
+				auxservice.KillAux(ctx, dockerClient, auxservice.GetAuxID())
 				return id, true
 			},
 			wait: func(t *testing.T, timeout time.Duration) bool {
@@ -241,7 +242,7 @@ func Test_Integration(t *testing.T) {
 				// Initialize parent context (with timeout)
 				timeoutCtx, cancel := context.WithTimeout(context.Background(), timeout)
 
-				auxDie := timoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
+				auxDie := auxservice.TimeoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
 					dc, err := client.NewEnvClient()
 					if err != nil {
 						t.Errorf("%v", err)
@@ -295,7 +296,7 @@ func Test_Integration(t *testing.T) {
 						if v {
 							log.Printf("Setting deadAux to %v", v)
 							deadAux = v
-							auxServiceStart = timoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
+							auxServiceStart = auxservice.TimeoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
 								dc, err := client.NewEnvClient()
 								if err != nil {
 									t.Errorf("%v", err)
@@ -333,9 +334,9 @@ func Test_Integration(t *testing.T) {
 						}
 					case v := <-auxServiceStart:
 						if v {
-							log.Printf("Setting startAuxService to %v", v)
+							log.Printf("Setting auxservice.StartAuxService to %v", v)
 							startAuxService = v
-							auxRestart = timoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
+							auxRestart = auxservice.TimeoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
 								dc, err := client.NewEnvClient()
 								if err != nil {
 									t.Errorf("%v", err)
@@ -402,12 +403,12 @@ func Test_Integration(t *testing.T) {
 		{
 			name: "Stop",
 			run: func(t *testing.T) (string, bool) {
-				id, err := StartAuxService(ctx, dockerClient, auxServiceSpec)
+				id, err := auxservice.StartAuxService(ctx, dockerClient, auxservice.AuxServiceSpec)
 				if err != nil {
 					t.Errorf("%v", err)
 					return "", false
 				}
-				KillAuxService(ctx, dockerClient, id)
+				auxservice.KillAuxService(ctx, dockerClient, id)
 				return id, true
 			},
 			wait: func(t *testing.T, timeout time.Duration) bool {
@@ -418,7 +419,7 @@ func Test_Integration(t *testing.T) {
 				// Initialize parent context (with timeout)
 				timeoutCtx, cancel := context.WithTimeout(context.Background(), timeout)
 
-				auxStopped := timoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
+				auxStopped := auxservice.TimeoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
 					dc, err := client.NewEnvClient()
 					if err != nil {
 						t.Errorf("%v", err)
@@ -454,7 +455,7 @@ func Test_Integration(t *testing.T) {
 					}
 				})
 
-				auxServiceStopped := timoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
+				auxServiceStopped := auxservice.TimeoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
 					dc, err := client.NewEnvClient()
 					if err != nil {
 						t.Errorf("%v", err)
@@ -545,10 +546,10 @@ func Test_Integration(t *testing.T) {
 			id, verify := tt.run(t)
 			assert.True(t, verify)
 			assert.True(t, <-res)
-			KillAuxService(ctx, dockerClient, id)
+			auxservice.KillAuxService(ctx, dockerClient, id)
 		})
 	}
-	err = KillNet(netRes.ID)
+	err = auxservice.KillNet(netRes.ID)
 	if err != nil {
 		t.Errorf("%v", err)
 	}
