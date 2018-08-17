@@ -53,5 +53,11 @@ script:
   # integration tests
   - go test -v -parallel 1 github.com/ramrod-project/aux-services-service/test
 
+after_success:
+  - if [[ "$TRAVIS_PULL_REQUEST" == "false" ]]; 
+    then echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin; fi
+  - if [[ "$TRAVIS_PULL_REQUEST" == "false"  ]]; 
+    then docker push ramrodpcp/auxiliary-wrapper:$TAG; fi
+
 notifications:
   slack: ramrod-project:GDF82rRYDg3KSekrT3GA24qO
