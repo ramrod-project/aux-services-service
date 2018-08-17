@@ -181,14 +181,16 @@ func MonitorAux(ctx context.Context) (<-chan struct{}, <-chan error) {
 		for {
 			select {
 			case e := <-events:
-				switch e.Status {
-				case "create":
-					log.Printf("Aux services created")
-				case "start":
-					log.Printf("Aux services started")
-				case "die":
-					log.Printf("Container dead, dying...")
-					break L
+				if e.Actor.Attributes["name"] == AuxContainerName {
+					switch e.Status {
+					case "create":
+						log.Printf("Aux services created")
+					case "start":
+						log.Printf("Aux services started")
+					case "die":
+						log.Printf("Container dead, dying...")
+						break L
+					}
 				}
 			case <-ctx.Done():
 				return
