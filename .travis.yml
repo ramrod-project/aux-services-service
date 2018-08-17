@@ -36,8 +36,8 @@ install:
   - go vet
   - go build -race
   - ./cc-test-reporter before-build
-  - go test -coverprofile=auxservice.cover -v -parallel 1 github.com/ramrod-project/aux-services-service/auxservice
-  - ./cc-test-reporter after-build --exit-code 0
+  - go test -coverprofile=out -v -parallel 1 github.com/ramrod-project/aux-services-service/auxservice
+  - ./cc-test-reporter after-build -t gocov --exit-code 0
   - make
 
 before_script:
