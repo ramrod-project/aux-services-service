@@ -373,10 +373,10 @@ func Test_getArgs(t *testing.T) {
 
 	f := filters.NewArgs()
 	f.Add(
-		"Type", "container",
+		"type", "container",
 	)
 	f.Add(
-		"Actor.Attributes.name", AuxContainerName,
+		"container", AuxContainerName,
 	)
 	tests := []struct {
 		name string
