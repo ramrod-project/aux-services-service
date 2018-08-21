@@ -5,7 +5,9 @@
 sudo: required
 
 env:
-  - DEP_VERSION="0.4.1"
+  global:
+    - DEP_VERSION="0.4.1"
+    - CC_TEST_REPORTER_ID=378ae86d47af2fe1b839e2827963ed19d73df1f9ad7bc0219724b8555dd60404
 
 language: go
 go:
@@ -33,7 +35,7 @@ install:
   - dep ensure
   - go vet
   - go build -race
-  - go test -v -parallel 1 github.com/ramrod-project/aux-services-service/auxservice
+  - ./codecoverage.sh
   - make
 
 before_script:
