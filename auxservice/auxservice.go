@@ -169,14 +169,13 @@ func MonitorAux(ctx context.Context) (<-chan struct{}, <-chan error) {
 	if err != nil {
 		panic(err)
 	}
-	log.Printf("%+v", getArgs())
-
 	events, errs := dockerClient.Events(
 		ctx,
 		types.EventsOptions{
 			Filters: getArgs(),
 		},
 	)
+
 	go func() {
 	L:
 		for {
@@ -188,7 +187,6 @@ func MonitorAux(ctx context.Context) (<-chan struct{}, <-chan error) {
 				case "start":
 					log.Printf("Aux services started")
 				case "die":
-					log.Printf("dead container event: %+v", e)
 					log.Printf("Container dead, dying...")
 					break L
 				}
