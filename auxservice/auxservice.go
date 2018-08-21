@@ -107,11 +107,11 @@ func getPortMap(ip string, ports []nat.Port) nat.PortMap {
 func getArgs() filters.Args {
 	args := filters.NewArgs()
 	args.Add(
-		"Type",
+		"type",
 		"container",
 	)
 	args.Add(
-		"Actor.Attributes.name",
+		"container",
 		AuxContainerName,
 	)
 	return args
@@ -169,6 +169,7 @@ func MonitorAux(ctx context.Context) (<-chan struct{}, <-chan error) {
 	if err != nil {
 		panic(err)
 	}
+	log.Printf("%+v", getArgs())
 
 	events, errs := dockerClient.Events(
 		ctx,
@@ -181,16 +182,15 @@ func MonitorAux(ctx context.Context) (<-chan struct{}, <-chan error) {
 		for {
 			select {
 			case e := <-events:
-				if e.Actor.Attributes["name"] == AuxContainerName {
-					switch e.Status {
-					case "create":
-						log.Printf("Aux services created")
-					case "start":
-						log.Printf("Aux services started")
-					case "die":
-						log.Printf("Container dead, dying...")
-						break L
-					}
+				switch e.Status {
+				case "create":
+					log.Printf("Aux services created")
+				case "start":
+					log.Printf("Aux services started")
+				case "die":
+					log.Printf("dead container event: %+v", e)
+					log.Printf("Container dead, dying...")
+					break L
 				}
 			case <-ctx.Done():
 				return
