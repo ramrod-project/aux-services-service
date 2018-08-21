@@ -31,6 +31,8 @@ before_install:
   - docker swarm init
   - travis_wait 10 docker pull alpine:3.7
   - travis_wait 10 docker pull ramrodpcp/auxiliary-services:$TAG
+  - curl -L https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 > ./cc-test-reporter
+  - chmod +x ./cc-test-reporter
 
 install:  
   - dep ensure
