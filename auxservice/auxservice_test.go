@@ -13,7 +13,9 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 	"github.com/stretchr/testify/assert"
@@ -371,10 +373,10 @@ func Test_getArgs(t *testing.T) {
 
 	f := filters.NewArgs()
 	f.Add(
-		"Type", "container",
+		"type", "container",
 	)
 	f.Add(
-		"Actor.Attributes.name", AuxContainerName,
+		"container", AuxContainerName,
 	)
 	tests := []struct {
 		name string
@@ -495,6 +497,7 @@ func TestMonitorAux(t *testing.T) {
 		return
 	}
 
+	// aux services container
 	con, err := dockerClient.ContainerCreate(
 		ctx,
 		&AuxContainerConfig,
@@ -508,6 +511,39 @@ func TestMonitorAux(t *testing.T) {
 		return
 	}
 	err = dockerClient.ContainerStart(ctx, con.ID, types.ContainerStartOptions{})
+	if err != nil {
+		t.Errorf("%v", err)
+		return
+	}
+
+	// fake dumb container
+	conFake, err := dockerClient.ContainerCreate(
+		ctx,
+		&container.Config{
+			Hostname: "testcontainer",
+			Cmd:      []string{"sleep", "300"},
+			Image:    "alpine:3.7",
+		},
+		&container.HostConfig{
+			NetworkMode: "default",
+			AutoRemove:  true,
+		},
+		&network.NetworkingConfig{
+			EndpointsConfig: map[string]*network.EndpointSettings{
+				"pcp": &network.EndpointSettings{
+					Aliases:   []string{"testcontainer"},
+					NetworkID: Net.ID,
+				},
+			},
+		},
+		"testcontainer",
+	)
+	if err != nil {
+		log.Printf("Test container create error")
+		t.Errorf("%v", err)
+		return
+	}
+	err = dockerClient.ContainerStart(ctx, conFake.ID, types.ContainerStartOptions{})
 	if err != nil {
 		t.Errorf("%v", err)
 		return
@@ -532,60 +568,126 @@ func TestMonitorAux(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		res     struct{}
+		killCon string
 		wantErr bool
 		err     error
+		wait    func(chan bool, ...interface{})
 	}{
 		{
 			name:    "cancel context",
 			wantErr: true,
-			err:     errors.New("context canceled"),
+			wait: func(res chan bool, args ...interface{}) {
+				timeoutCtx, cancelTimeout := context.WithTimeout(context.Background(), 3*time.Second)
+				defer cancelTimeout()
+
+				err := args[1].(<-chan error)
+				cancel := args[0].(context.CancelFunc)
+				cancel()
+
+				select {
+				case <-timeoutCtx.Done():
+					close(res)
+					return
+				case e := <-err:
+					assert.Equal(t, errors.New("context canceled"), e)
+					res <- true
+				}
+			},
 		},
 		{
-			name: "container dead",
-			res:  struct{}{},
+			name:    "test container dead (timeout)",
+			killCon: conFake.ID,
+			wait: func(res chan bool, args ...interface{}) {
+				timeoutCtx, cancelTimeout := context.WithTimeout(context.Background(), 3*time.Second)
+				defer cancelTimeout()
+
+				id := args[0].(string)
+				sig := args[1].(<-chan struct{})
+
+				err := dockerClient.ContainerKill(timeoutCtx, id, "SIGKILL")
+				if err != nil {
+					t.Errorf("%v", err)
+					close(res)
+					return
+				}
+
+				select {
+				case <-timeoutCtx.Done():
+					res <- true
+					close(res)
+					return
+				case <-sig:
+					close(res)
+					return
+				}
+			},
 		},
+		{
+			name:    "aux container dead",
+			killCon: con.ID,
+			wait: func(res chan bool, args ...interface{}) {
+				timeoutCtx, cancelTimeout := context.WithTimeout(context.Background(), 3*time.Second)
+				defer cancelTimeout()
+
+				id := args[0].(string)
+				sig := args[1].(<-chan struct{})
+
+				err := dockerClient.ContainerKill(timeoutCtx, id, "SIGKILL")
+				if err != nil {
+					t.Errorf("%v", err)
+					close(res)
+					return
+				}
+
+				select {
+				case <-timeoutCtx.Done():
+					close(res)
+					return
+				case <-sig:
+					res <- true
+					close(res)
+					return
+				}
+			},
+		},
+		// add test case for wrong container dying
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			newCtx, cancel := context.WithCancel(context.Background())
+			// overall timeout for test
+			testTimeout, testCancel := context.WithTimeout(context.Background(), 10*time.Second)
+			// we will manually cancel this context, so it must be separate from
+			// the overall test context
+			newCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			sig, err := MonitorAux(newCtx)
+			defer testCancel()
+			defer cancel()
 
-			timeoutCtx, cancelTimeout := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancelTimeout()
-
+			var resChan <-chan bool
 			if tt.wantErr {
-				cancel()
-				select {
-				case <-timeoutCtx.Done():
-					t.Errorf("err %v not received", tt.err)
-					assert.True(t, false)
-					return
-				case e := <-err:
-					assert.Equal(t, tt.err, e)
-				}
+				resChan = func() <-chan bool {
+					res := make(chan bool)
+					go tt.wait(res, cancel, err)
+					return res
+				}()
 			} else {
-				defer cancel()
-
-				err := dockerClient.ContainerKill(ctx, con.ID, "SIGKILL")
-				if err != nil {
-					t.Errorf("error killing container: %v", err)
-					return
-				}
-
-				select {
-				case <-timeoutCtx.Done():
-					t.Errorf("signal not received")
-					assert.True(t, false)
-					return
-				case r := <-sig:
-					assert.Equal(t, tt.res, r)
-				}
+				resChan = func() <-chan bool {
+					res := make(chan bool)
+					go tt.wait(res, tt.killCon, sig)
+					return res
+				}()
+			}
+			select {
+			case <-testTimeout.Done():
+				t.Errorf("test context timed out")
+			case v := <-resChan:
+				assert.True(t, v)
 			}
 		})
 	}
 
 	KillAux(ctx, dockerClient, con.ID)
+	KillAux(ctx, dockerClient, conFake.ID)
 	err = KillNet(netRes.ID)
 	if err != nil {
 		t.Errorf("%v", err)

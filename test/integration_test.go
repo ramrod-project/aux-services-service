@@ -45,7 +45,9 @@ func Test_Integration(t *testing.T) {
 		{
 			name: "Startup",
 			run: func(t *testing.T) (string, bool) {
-				id, err := auxservice.StartAuxService(ctx, dockerClient, auxservice.AuxServiceSpec)
+				newSpec := auxservice.AuxServiceSpec
+				newSpec.TaskTemplate.ContainerSpec.Image = "ramrodpcp/auxiliary-wrapper:test"
+				id, err := auxservice.StartAuxService(ctx, dockerClient, newSpec)
 				if err != nil {
 					t.Errorf("%v", err)
 					return "", false
@@ -226,7 +228,9 @@ func Test_Integration(t *testing.T) {
 		{
 			name: "Kill container",
 			run: func(t *testing.T) (string, bool) {
-				id, err := auxservice.StartAuxService(ctx, dockerClient, auxservice.AuxServiceSpec)
+				newSpec := auxservice.AuxServiceSpec
+				newSpec.TaskTemplate.ContainerSpec.Image = "ramrodpcp/auxiliary-wrapper:test"
+				id, err := auxservice.StartAuxService(ctx, dockerClient, newSpec)
 				if err != nil {
 					t.Errorf("%v", err)
 					return "", false
@@ -403,7 +407,9 @@ func Test_Integration(t *testing.T) {
 		{
 			name: "Stop",
 			run: func(t *testing.T) (string, bool) {
-				id, err := auxservice.StartAuxService(ctx, dockerClient, auxservice.AuxServiceSpec)
+				newSpec := auxservice.AuxServiceSpec
+				newSpec.TaskTemplate.ContainerSpec.Image = "ramrodpcp/auxiliary-wrapper:test"
+				id, err := auxservice.StartAuxService(ctx, dockerClient, newSpec)
 				if err != nil {
 					t.Errorf("%v", err)
 					return "", false
@@ -472,7 +478,6 @@ func Test_Integration(t *testing.T) {
 							log.Println(fmt.Errorf("%v", e))
 							return false
 						case e := <-eventChan:
-							log.Printf("event: %+v", e)
 							if e.Type != "container" {
 								break
 							}
