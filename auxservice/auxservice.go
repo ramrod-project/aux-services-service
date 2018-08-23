@@ -107,11 +107,11 @@ func getPortMap(ip string, ports []nat.Port) nat.PortMap {
 func getArgs() filters.Args {
 	args := filters.NewArgs()
 	args.Add(
-		"Type",
+		"type",
 		"container",
 	)
 	args.Add(
-		"Actor.Attributes.name",
+		"container",
 		AuxContainerName,
 	)
 	return args
@@ -169,13 +169,13 @@ func MonitorAux(ctx context.Context) (<-chan struct{}, <-chan error) {
 	if err != nil {
 		panic(err)
 	}
-
 	events, errs := dockerClient.Events(
 		ctx,
 		types.EventsOptions{
 			Filters: getArgs(),
 		},
 	)
+
 	go func() {
 	L:
 		for {

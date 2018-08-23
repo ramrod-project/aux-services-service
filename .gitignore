@@ -12,3 +12,5 @@
 *.out
 vendor*
 aux-service
+*.cover
+cc-test-reporter
