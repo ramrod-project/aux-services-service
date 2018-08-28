@@ -3,121 +3,20 @@ package auxservice
 // TODO:
 
 import (
-	"bytes"
 	"context"
 	"log"
 	"os"
-	"strings"
 	"syscall"
 	"time"
 
 	"github.com/docker/docker/client"
+	"github.com/ramrod-project/aux-services-service/helper"
 
 	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/filters"
-
-	"github.com/docker/go-connections/nat"
 )
 
-func concatString(k string, sep string, v string) string {
-	var stringBuf bytes.Buffer
-
-	stringBuf.WriteString(k)
-	stringBuf.WriteString(sep)
-	stringBuf.WriteString(v)
-
-	return stringBuf.String()
-}
-
-func getEnvByKey(k string) string {
-	var env string
-	env = os.Getenv(k)
-
-	if env == "" {
-		env = defaultEnvs[k]
-	}
-
-	return concatString(k, "=", env)
-}
-
-func getTagFromEnv() string {
-	temp := os.Getenv("TAG")
-	if temp == "" {
-		temp = "latest"
-	}
-	return temp
-}
-
-func getPorts(in [][]string) []nat.Port {
-	ports := make([]nat.Port, len(in))
-	for i, p := range in {
-		port, err := nat.NewPort(p[0], p[1])
-		if err != nil {
-			log.Printf("%v", err)
-			return []nat.Port{}
-		}
-		ports[i] = port
-	}
-	return ports
-}
-
-func getPortSet() nat.PortSet {
-	var portSet = make(nat.PortSet)
-	for _, p := range getPorts([][]string{[]string{"tcp", "20"}, []string{"tcp", "21"}, []string{"tcp", "80"}, []string{"udp", "53"}}) {
-		portSet[p] = struct{}{}
-	}
-	return portSet
-}
-
-func getIP() string {
-	ctx, cancel := context.WithCancel(context.Background())
-	dockerClient, err := client.NewEnvClient()
-	if err != nil {
-		panic(err)
-	}
-
-	defer cancel()
-
-	nodes, err := dockerClient.NodeList(ctx, types.NodeListOptions{})
-	if err != nil {
-		panic(err)
-	}
-
-	for _, n := range nodes {
-		if n.ManagerStatus.Leader {
-			return n.Status.Addr
-		}
-	}
-	return ""
-}
-
-func getPortMap(ip string, ports []nat.Port) nat.PortMap {
-	var portM = make(nat.PortMap)
-	for _, p := range ports {
-		portM[p] = []nat.PortBinding{
-			nat.PortBinding{
-				HostIP:   ip,
-				HostPort: strings.Split(string(p), "/")[0],
-			},
-		}
-	}
-	return portM
-}
-
-func getArgs() filters.Args {
-	args := filters.NewArgs()
-	args.Add(
-		"type",
-		"container",
-	)
-	args.Add(
-		"container",
-		AuxContainerName,
-	)
-	return args
-}
-
-// SignalCatcher
+// SignalCatcher takes a channel of os.Signals from the main
+// function and handles SIGTERM, SIGKILL, and SIGINT
 func SignalCatcher(sigc <-chan os.Signal, sigCancel context.CancelFunc, id string) <-chan struct{} {
 	signaller := make(chan struct{})
 
@@ -161,7 +60,10 @@ func SignalCatcher(sigc <-chan os.Signal, sigCancel context.CancelFunc, id strin
 	return signaller
 }
 
-// MonitorAux function
+// MonitorAux monitors container events of the
+// aux services container. If the container
+// dies unexpectedly, the service should also
+// die (so Docker automatically restarts it)
 func MonitorAux(ctx context.Context) (<-chan struct{}, <-chan error) {
 	signaller := make(chan struct{})
 
@@ -172,7 +74,7 @@ func MonitorAux(ctx context.Context) (<-chan struct{}, <-chan error) {
 	events, errs := dockerClient.Events(
 		ctx,
 		types.EventsOptions{
-			Filters: getArgs(),
+			Filters: helper.GetContainerFilterArgs(helper.AuxContainerName),
 		},
 	)
 
@@ -200,7 +102,8 @@ func MonitorAux(ctx context.Context) (<-chan struct{}, <-chan error) {
 	return signaller, errs
 }
 
-// CheckForAux
+// CheckForAux checks to see if the aux services
+// container is already running.
 func CheckForAux(ctx context.Context) string {
 	dockerClient, err := client.NewEnvClient()
 	if err != nil {
@@ -217,7 +120,7 @@ func CheckForAux(ctx context.Context) string {
 
 	for _, c := range containers {
 		for _, n := range c.Names {
-			if n == AuxContainerName {
+			if n == helper.AuxContainerName {
 				return c.ID
 			}
 		}
