@@ -10,6 +10,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"github.com/ramrod-project/aux-services-service/auxservice"
+	"github.com/ramrod-project/aux-services-service/helper"
 )
 
 func main() {
@@ -31,10 +32,10 @@ func main() {
 	// Create the container with the provided configs
 	con, err := dockerClient.ContainerCreate(
 		ctx,
-		&auxservice.AuxContainerConfig,
-		&auxservice.AuxHostConfig,
-		&auxservice.AuxNetConfig,
-		auxservice.AuxContainerName,
+		&helper.AuxContainerConfig,
+		&helper.AuxHostConfig,
+		&helper.AuxNetConfig,
+		helper.AuxContainerName,
 	)
 	if err != nil {
 		log.Printf("Container create error")
