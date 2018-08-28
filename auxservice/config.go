@@ -16,7 +16,7 @@ var defaultEnvs = map[string]string{
 	"STAGE":    "DEV",
 }
 
-var Net = func() types.NetworkResource {
+var Net = func() types.NetworkResource { // pragma: no cover
 	ctx, cancel := context.WithCancel(context.Background())
 	dockerClient, err := client.NewEnvClient()
 	if err != nil {

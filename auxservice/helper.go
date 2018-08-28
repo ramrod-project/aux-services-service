@@ -17,7 +17,7 @@ import (
 	"github.com/docker/docker/client"
 )
 
-func waitForStart(id string) error {
+func waitForStart(id string) error { // pragma: no cover
 	ctx, cancel := context.WithCancel(context.Background())
 	dockerClient, err := client.NewEnvClient()
 
@@ -46,7 +46,7 @@ func waitForStart(id string) error {
 	return errors.New("aux not starting in time")
 }
 
-func waitForStop(id string) error {
+func waitForStop(id string) error { // pragma: no cover
 	ctx, cancel := context.WithCancel(context.Background())
 	dockerClient, err := client.NewEnvClient()
 
@@ -77,7 +77,7 @@ func waitForStop(id string) error {
 	return errors.New("aux not starting in time")
 }
 
-func GetAuxID() string {
+func GetAuxID() string { // pragma: no cover
 	ctx, cancel := context.WithCancel(context.Background())
 	dockerClient, err := client.NewEnvClient()
 	if err != nil {
@@ -101,7 +101,7 @@ func GetAuxID() string {
 	return ""
 }
 
-func getImage(image string) string {
+func getImage(image string) string { // pragma: no cover
 	var stringBuf bytes.Buffer
 
 	tag := os.Getenv("TAG")
@@ -116,7 +116,7 @@ func getImage(image string) string {
 	return stringBuf.String()
 }
 
-func getEnvStage() string {
+func getEnvStage() string { // pragma: no cover
 	var stringBuf bytes.Buffer
 
 	tag := os.Getenv("TAG")
@@ -130,6 +130,7 @@ func getEnvStage() string {
 	return stringBuf.String()
 }
 
+// AuxServiceSpec is a spec used for testing the aux service
 var AuxServiceSpec = swarm.ServiceSpec{
 	Annotations: swarm.Annotations{
 		Name: "AuxiliaryServices",
@@ -163,7 +164,10 @@ var AuxServiceSpec = swarm.ServiceSpec{
 	},
 }
 
-func TimeoutTester(ctx context.Context, args []interface{}, f func(args ...interface{}) bool) <-chan bool {
+// TimeoutTester is a wrapper for arbitrary testing functions
+// intended to be used to check for conditions which are met
+// with unpredictable timing during testing.
+func TimeoutTester(ctx context.Context, args []interface{}, f func(args ...interface{}) bool) <-chan bool { // pragma: no cover
 	done := make(chan bool)
 
 	go func() {
@@ -192,7 +196,8 @@ func TimeoutTester(ctx context.Context, args []interface{}, f func(args ...inter
 	return done
 }
 
-func StartAux(ctx context.Context, dockerClient *client.Client) (container.ContainerCreateCreatedBody, error) {
+// StartAux starts the test auxiliary services container
+func StartAux(ctx context.Context, dockerClient *client.Client) (container.ContainerCreateCreatedBody, error) { // pragma: no cover
 	con, err := dockerClient.ContainerCreate(
 		ctx,
 		&AuxContainerConfig,
@@ -211,7 +216,8 @@ func StartAux(ctx context.Context, dockerClient *client.Client) (container.Conta
 	return con, nil
 }
 
-func StartAuxService(ctx context.Context, dockerClient *client.Client, spec swarm.ServiceSpec) (string, error) {
+// StartAuxService starts the test auxiliary services service
+func StartAuxService(ctx context.Context, dockerClient *client.Client, spec swarm.ServiceSpec) (string, error) { // pragma: no cover
 
 	// Start service
 	result, err := dockerClient.ServiceCreate(ctx, spec, types.ServiceCreateOptions{})
@@ -221,7 +227,7 @@ func StartAuxService(ctx context.Context, dockerClient *client.Client, spec swar
 	return result.ID, waitForStart(result.ID)
 }
 
-// KillAux
+// KillAux kills the aux services container
 func KillAux(ctx context.Context, dockerClient *client.Client, id string) error {
 	start := time.Now()
 	var err error
@@ -234,7 +240,7 @@ func KillAux(ctx context.Context, dockerClient *client.Client, id string) error 
 	return err
 }
 
-// KillNet
+// KillNet removes the test network
 func KillNet(netid string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	dockerClient, err := client.NewEnvClient()
@@ -259,7 +265,8 @@ func KillNet(netid string) error {
 	return errors.New("couldn't clean up networks")
 }
 
-func KillAuxService(ctx context.Context, dockerClient *client.Client, svcID string) error {
+// KillAuxService removes the aux services service reliably
+func KillAuxService(ctx context.Context, dockerClient *client.Client, svcID string) error { // pragma: no cover
 	start := time.Now()
 	for time.Since(start) < 10*time.Second {
 		err := dockerClient.ServiceRemove(ctx, svcID)
