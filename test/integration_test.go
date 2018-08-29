@@ -9,10 +9,140 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/swarm"
 	"github.com/docker/docker/client"
-	"github.com/ramrod-project/aux-services-service/auxservice"
+	"github.com/ramrod-project/aux-services-service/helper"
 	"github.com/stretchr/testify/assert"
 )
+
+func waitForStart(id string) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	dockerClient, err := client.NewEnvClient()
+	defer cancel()
+	if err != nil {
+		return err
+	}
+
+	start := time.Now()
+	for time.Since(start) < 15*time.Second {
+		_, _, err := dockerClient.ServiceInspectWithRaw(ctx, id)
+		if err == nil {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	for time.Since(start) < 15*time.Second {
+		conid := helper.GetAuxID()
+		if conid != "" {
+			insp, err := dockerClient.ContainerInspect(ctx, conid)
+			if err == nil && insp.State.Status == "running" {
+				return nil
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return errors.New("aux not starting in time")
+}
+
+func waitForStop(id string) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	dockerClient, err := client.NewEnvClient()
+	defer cancel()
+	if err != nil {
+		return err
+	}
+
+	start := time.Now()
+	for time.Since(start) < 15*time.Second {
+		_, _, err := dockerClient.ServiceInspectWithRaw(ctx, id)
+		if err != nil {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	for time.Since(start) < 15*time.Second {
+		conid := helper.GetAuxID()
+		if conid != "" {
+			_, err := dockerClient.ContainerInspect(ctx, conid)
+			if err != nil {
+				return nil
+			}
+		} else {
+			return nil
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return errors.New("aux not starting in time")
+}
+
+func killAuxService(ctx context.Context, dockerClient *client.Client, svcID string) error {
+	start := time.Now()
+	for time.Since(start) < 10*time.Second {
+		err := dockerClient.ServiceRemove(ctx, svcID)
+		if err != nil {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+	for time.Since(start) < 15*time.Second {
+		containers, err := dockerClient.ContainerList(ctx, types.ContainerListOptions{})
+		if err == nil {
+			if len(containers) == 0 {
+				break
+			}
+			for _, c := range containers {
+				err = dockerClient.ContainerKill(ctx, c.ID, "")
+				if err == nil {
+					dockerClient.ContainerRemove(ctx, c.ID, types.ContainerRemoveOptions{Force: true})
+				}
+			}
+		}
+		time.Sleep(time.Second)
+	}
+	return waitForStop(svcID)
+}
+
+func startAuxService(ctx context.Context, dockerClient *client.Client, spec swarm.ServiceSpec) (string, error) {
+
+	// Start service
+	result, err := dockerClient.ServiceCreate(ctx, spec, types.ServiceCreateOptions{})
+	if err != nil {
+		return "", err
+	}
+	return result.ID, waitForStart(result.ID)
+}
+
+// timeoutTester is a wrapper for arbitrary testing functions
+// intended to be used to check for conditions which are met
+// with unpredictable timing during testing.
+func timeoutTester(ctx context.Context, args []interface{}, f func(args ...interface{}) bool) <-chan bool {
+	done := make(chan bool)
+
+	go func() {
+		for {
+			recv := make(chan bool)
+
+			go func() {
+				recv <- f(args...)
+				close(recv)
+				return
+			}()
+
+			select {
+			case <-ctx.Done():
+				done <- false
+				close(done)
+				return
+			case b := <-recv:
+				done <- b
+				close(done)
+				return
+			}
+		}
+	}()
+
+	return done
+}
 
 func Test_Integration(t *testing.T) {
 
@@ -45,9 +175,9 @@ func Test_Integration(t *testing.T) {
 		{
 			name: "Startup",
 			run: func(t *testing.T) (string, bool) {
-				newSpec := auxservice.AuxServiceSpec
+				newSpec := helper.AuxServiceSpec
 				newSpec.TaskTemplate.ContainerSpec.Image = "ramrodpcp/auxiliary-wrapper:test"
-				id, err := auxservice.StartAuxService(ctx, dockerClient, newSpec)
+				id, err := startAuxService(ctx, dockerClient, newSpec)
 				if err != nil {
 					t.Errorf("%v", err)
 					return "", false
@@ -63,7 +193,7 @@ func Test_Integration(t *testing.T) {
 				// Initialize parent context (with timeout)
 				timeoutCtx, cancel := context.WithTimeout(context.Background(), timeout)
 
-				auxCreated := auxservice.TimeoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
+				auxCreated := timeoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
 					dc, err := client.NewEnvClient()
 					if err != nil {
 						t.Errorf("%v", err)
@@ -100,7 +230,7 @@ func Test_Integration(t *testing.T) {
 					}
 				})
 
-				auxStarted := auxservice.TimeoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
+				auxStarted := timeoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
 					dc, err := client.NewEnvClient()
 					if err != nil {
 						t.Errorf("%v", err)
@@ -137,7 +267,7 @@ func Test_Integration(t *testing.T) {
 					}
 				})
 
-				auxRunning := auxservice.TimeoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
+				auxRunning := timeoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
 					dc, err := client.NewEnvClient()
 					if err != nil {
 						t.Errorf("%v", err)
@@ -228,14 +358,14 @@ func Test_Integration(t *testing.T) {
 		{
 			name: "Kill container",
 			run: func(t *testing.T) (string, bool) {
-				newSpec := auxservice.AuxServiceSpec
+				newSpec := helper.AuxServiceSpec
 				newSpec.TaskTemplate.ContainerSpec.Image = "ramrodpcp/auxiliary-wrapper:test"
-				id, err := auxservice.StartAuxService(ctx, dockerClient, newSpec)
+				id, err := startAuxService(ctx, dockerClient, newSpec)
 				if err != nil {
 					t.Errorf("%v", err)
 					return "", false
 				}
-				auxservice.KillAux(ctx, dockerClient, auxservice.GetAuxID())
+				helper.KillAux(ctx, dockerClient, helper.GetAuxID())
 				return id, true
 			},
 			wait: func(t *testing.T, timeout time.Duration) bool {
@@ -246,7 +376,7 @@ func Test_Integration(t *testing.T) {
 				// Initialize parent context (with timeout)
 				timeoutCtx, cancel := context.WithTimeout(context.Background(), timeout)
 
-				auxDie := auxservice.TimeoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
+				auxDie := timeoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
 					dc, err := client.NewEnvClient()
 					if err != nil {
 						t.Errorf("%v", err)
@@ -300,7 +430,7 @@ func Test_Integration(t *testing.T) {
 						if v {
 							log.Printf("Setting deadAux to %v", v)
 							deadAux = v
-							auxServiceStart = auxservice.TimeoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
+							auxServiceStart = timeoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
 								dc, err := client.NewEnvClient()
 								if err != nil {
 									t.Errorf("%v", err)
@@ -338,9 +468,9 @@ func Test_Integration(t *testing.T) {
 						}
 					case v := <-auxServiceStart:
 						if v {
-							log.Printf("Setting auxservice.StartAuxService to %v", v)
+							log.Printf("Setting startAuxService to %v", v)
 							startAuxService = v
-							auxRestart = auxservice.TimeoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
+							auxRestart = timeoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
 								dc, err := client.NewEnvClient()
 								if err != nil {
 									t.Errorf("%v", err)
@@ -407,14 +537,14 @@ func Test_Integration(t *testing.T) {
 		{
 			name: "Stop",
 			run: func(t *testing.T) (string, bool) {
-				newSpec := auxservice.AuxServiceSpec
+				newSpec := helper.AuxServiceSpec
 				newSpec.TaskTemplate.ContainerSpec.Image = "ramrodpcp/auxiliary-wrapper:test"
-				id, err := auxservice.StartAuxService(ctx, dockerClient, newSpec)
+				id, err := startAuxService(ctx, dockerClient, newSpec)
 				if err != nil {
 					t.Errorf("%v", err)
 					return "", false
 				}
-				auxservice.KillAuxService(ctx, dockerClient, id)
+				killAuxService(ctx, dockerClient, id)
 				return id, true
 			},
 			wait: func(t *testing.T, timeout time.Duration) bool {
@@ -425,7 +555,7 @@ func Test_Integration(t *testing.T) {
 				// Initialize parent context (with timeout)
 				timeoutCtx, cancel := context.WithTimeout(context.Background(), timeout)
 
-				auxStopped := auxservice.TimeoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
+				auxStopped := timeoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
 					dc, err := client.NewEnvClient()
 					if err != nil {
 						t.Errorf("%v", err)
@@ -461,7 +591,7 @@ func Test_Integration(t *testing.T) {
 					}
 				})
 
-				auxServiceStopped := auxservice.TimeoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
+				auxServiceStopped := timeoutTester(timeoutCtx, []interface{}{timeoutCtx}, func(args ...interface{}) bool {
 					dc, err := client.NewEnvClient()
 					if err != nil {
 						t.Errorf("%v", err)
@@ -551,10 +681,10 @@ func Test_Integration(t *testing.T) {
 			id, verify := tt.run(t)
 			assert.True(t, verify)
 			assert.True(t, <-res)
-			auxservice.KillAuxService(ctx, dockerClient, id)
+			killAuxService(ctx, dockerClient, id)
 		})
 	}
-	err = auxservice.KillNet(netRes.ID)
+	err = helper.KillNet(netRes.ID)
 	if err != nil {
 		t.Errorf("%v", err)
 	}
