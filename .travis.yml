@@ -1,0 +1,69 @@
+# TODO:
+# - Add Golint
+# - Add coverage tool
+
+sudo: required
+
+env:
+  global:
+    - DEP_VERSION="0.4.1"
+    - CC_TEST_REPORTER_ID=378ae86d47af2fe1b839e2827963ed19d73df1f9ad7bc0219724b8555dd60404
+
+language: go
+go:
+  - "1.10.3"
+
+services:
+  - docker
+
+branches:
+  only:
+  - master
+  - dev
+  - qa
+
+before_install:
+  - if [ "$TRAVIS_BRANCH" == "master" ]; 
+    then export TAG=latest;
+    else export TAG=$TRAVIS_BRANCH; fi
+  - curl -L -s https://github.com/golang/dep/releases/download/v${DEP_VERSION}/dep-linux-amd64 -o $GOPATH/bin/dep
+  - chmod +x $GOPATH/bin/dep
+  - docker swarm init
+  - travis_wait 10 docker pull alpine:3.7
+  - travis_wait 10 docker pull ramrodpcp/auxiliary-services:$TAG
+  - curl -L https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 > ./cc-test-reporter
+  - chmod +x ./cc-test-reporter
+
+install:  
+  - dep ensure
+  - go vet
+  - go build -race
+  - ./codecoverage.sh
+  - make
+
+before_script:
+  - docker network prune -f
+
+script:
+  - docker build -t ramrodpcp/auxiliary-wrapper:test .
+  - docker network create --driver=overlay pcp --attachable
+  - docker service create --name AuxiliaryServices --network pcp -e "STAGE=DEV" -e "LOGLEVEL=DEBUG" -e "TAG=${TAG}" --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock ramrodpcp/auxiliary-wrapper:test
+  - sleep 10
+  - docker service ps --no-trunc AuxiliaryServices
+  - docker ps -a --no-trunc
+  - docker service logs AuxiliaryServices
+  - docker service rm AuxiliaryServices
+  - sleep 10
+  - docker network prune -f
+  # integration tests
+  - go test -v -parallel 1 github.com/ramrod-project/aux-services-service/test
+
+after_success:
+  - docker tag ramrodpcp/auxiliary-wrapper:test ramrodpcp/auxiliary-wrapper:$TAG
+  - if [[ "$TRAVIS_PULL_REQUEST" == "false" ]]; 
+    then echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin; fi
+  - if [[ "$TRAVIS_PULL_REQUEST" == "false"  ]]; 
+    then docker push ramrodpcp/auxiliary-wrapper:$TAG; fi
+
+notifications:
+  slack: ramrod-project:GDF82rRYDg3KSekrT3GA24qO
