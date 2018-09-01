@@ -32,12 +32,13 @@ before_install:
   - travis_wait 10 docker pull alpine:3.7
   - curl -L https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 > ./cc-test-reporter
   - chmod +x ./cc-test-reporter
+  - docker build -t ramrodpcp/auxiliary-services:test ./auxcontainer/aux_dockerfile/
 
 install:  
   - dep ensure
   - go vet
   - go build -race
-  - ./codecoverage.sh
+  - TAG=test ./codecoverage.sh
   - make
 
 before_script:
@@ -45,7 +46,6 @@ before_script:
 
 script:
   - docker build -t ramrodpcp/auxiliary-wrapper:test .
-  - docker build -t ramrodpcp/auxiliary-services:test ./auxcontainer/aux_dockerfile/
   - docker network create --driver=overlay pcp --attachable
   - docker service create --name AuxiliaryServices --network pcp -e "STAGE=DEV" -e "LOGLEVEL=DEBUG" -e "TAG=${TAG}" --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock ramrodpcp/auxiliary-wrapper:test
   - sleep 10
@@ -56,7 +56,7 @@ script:
   - sleep 10
   - docker network prune -f
   # integration tests
-  - go test -v -parallel 1 github.com/ramrod-project/aux-services-service/test
+  - TAG=test go test -v -parallel 1 github.com/ramrod-project/aux-services-service/test
   # e2e tests
   - bash <(curl -s https://raw.githubusercontent.com/ramrod-project/integration-stack/$TRAVIS_BRANCH/scripts/e2e.sh)
 
