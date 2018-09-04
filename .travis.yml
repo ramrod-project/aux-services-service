@@ -30,15 +30,15 @@ before_install:
   - chmod +x $GOPATH/bin/dep
   - docker swarm init
   - travis_wait 10 docker pull alpine:3.7
-  - travis_wait 10 docker pull ramrodpcp/auxiliary-services:$TAG
   - curl -L https://codeclimate.com/downloads/test-reporter/test-reporter-latest-linux-amd64 > ./cc-test-reporter
   - chmod +x ./cc-test-reporter
+  - docker build -t ramrodpcp/auxiliary-services:test ./auxcontainer/aux_dockerfile/
 
 install:  
   - dep ensure
   - go vet
   - go build -race
-  - ./codecoverage.sh
+  - TAG=test ./codecoverage.sh
   - make
 
 before_script:
@@ -56,16 +56,17 @@ script:
   - sleep 10
   - docker network prune -f
   # integration tests
-  - go test -v -parallel 1 github.com/ramrod-project/aux-services-service/test
+  - TAG=test go test -v -parallel 1 github.com/ramrod-project/aux-services-service/test
   # e2e tests
   - bash <(curl -s https://raw.githubusercontent.com/ramrod-project/integration-stack/$TRAVIS_BRANCH/scripts/e2e.sh)
 
 after_success:
   - docker tag ramrodpcp/auxiliary-wrapper:test ramrodpcp/auxiliary-wrapper:$TAG
+  - docker tag ramrodpcp/auxiliary-services:test ramrodpcp/auxiliary-services:$TAG
   - if [[ "$TRAVIS_PULL_REQUEST" == "false" ]]; 
     then echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin; fi
   - if [[ "$TRAVIS_PULL_REQUEST" == "false"  ]]; 
-    then docker push ramrodpcp/auxiliary-wrapper:$TAG; fi
+    then docker push ramrodpcp/auxiliary-wrapper:$TAG && docker push ramrodpcp/auxiliary-services:$TAG; fi
 
 notifications:
   slack: ramrod-project:GDF82rRYDg3KSekrT3GA24qO
