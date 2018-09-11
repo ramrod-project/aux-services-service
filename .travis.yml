@@ -12,6 +12,8 @@ env:
 language: go
 go:
   - "1.10.3"
+python:
+  - "3.6"
 
 services:
   - docker
@@ -46,15 +48,6 @@ before_script:
 
 script:
   - docker build -t ramrodpcp/auxiliary-wrapper:test .
-  - docker network create --driver=overlay pcp --attachable
-  - docker service create --name AuxiliaryServices --network pcp -e "STAGE=DEV" -e "LOGLEVEL=DEBUG" -e "TAG=${TAG}" --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock ramrodpcp/auxiliary-wrapper:test
-  - sleep 10
-  - docker service ps --no-trunc AuxiliaryServices
-  - docker ps -a --no-trunc
-  - docker service logs AuxiliaryServices
-  - docker service rm AuxiliaryServices
-  - sleep 10
-  - docker network prune -f
   # integration tests
   - TAG=test go test -v -parallel 1 github.com/ramrod-project/aux-services-service/test
   # e2e tests
