@@ -228,6 +228,7 @@ var AuxServiceSpec = swarm.ServiceSpec{
 			},
 			Env: []string{
 				getEnvStage(),
+				GetEnvByKey("TAG"),
 			},
 		},
 		Networks: []swarm.NetworkAttachmentConfig{
