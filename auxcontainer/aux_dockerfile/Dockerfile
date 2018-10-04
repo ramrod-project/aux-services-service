@@ -15,7 +15,7 @@ RUN apk add python3 && \
     rm -r /usr/lib/python*/ensurepip && \
     pip3 install --upgrade ramrodbrain
 
-RUN pip3 install fusepy
+RUN pip3 install fusepy==2.0.4
 
 RUN pip3 install flask
 
@@ -39,7 +39,7 @@ COPY ./config/vsftpd/vsftpd.conf /etc/vsftpd/vsftpd.conf
 RUN adduser -D -g 'fff' fff && \
     mkdir /home/fff/files && \
     chown fff /home/fff/files && \
-    chmod a-w /home/fff/
+    chmod 777 /home/fff
 
 COPY ./config/run.sh /run.sh
 COPY ./config/brain_filesystem.py /brain_filesystem.py
