@@ -58,6 +58,7 @@ script:
   - bash <(curl -s https://raw.githubusercontent.com/ramrod-project/integration-stack/$TRAVIS_BRANCH/scripts/e2e.sh)
 
 after_success:
+  - docker service rm $(docker service ls -q)
   - docker rmi $(docker images -q)
   - docker images
   - docker build -t ramrodpcp/auxiliary-wrapper:test .
