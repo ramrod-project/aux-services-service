@@ -21,7 +21,7 @@ RUN pip3 install fusepy==2.0.4
 
 RUN pip3 install flask
 
-COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY ./supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # Configure openrc
 RUN mkdir /run/openrc && \
