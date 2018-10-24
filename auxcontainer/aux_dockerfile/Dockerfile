@@ -39,7 +39,10 @@ COPY ./config/vsftpd/vsftpd.conf /etc/vsftpd/vsftpd.conf
 RUN adduser -D -g 'fff' fff
 RUN mkdir /home/fff/files
 RUN chown fff /home/fff/files
-RUN chmod 777 /home/fff
+RUN mkdir /home/fff/local
+RUN chown fff /home/fff/local
+RUN chmod 700 /home/fff/local
+RUN chmod 500 /home/fff
 
 COPY ./config/run.sh /run.sh
 COPY ./config/brain_filesystem.py /brain_filesystem.py
