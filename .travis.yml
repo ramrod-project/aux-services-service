@@ -58,10 +58,15 @@ script:
   - bash <(curl -s https://raw.githubusercontent.com/ramrod-project/integration-stack/$TRAVIS_BRANCH/scripts/e2e.sh)
 
 after_success:
-  - docker rmi ramrodpcp/auxiliary-wrapper:$TAG
-  - docker rmi ramrodpcp/auxiliary-services:$TAG
+  - docker service rm $(docker service ls -q)
+  - docker rmi $(docker images -q)
+  - docker images
+  - docker build -t ramrodpcp/auxiliary-wrapper:test .
+  - docker build -t ramrodpcp/auxiliary-services:test ./auxcontainer/aux_dockerfile/
+  - docker images
   - docker tag ramrodpcp/auxiliary-wrapper:test ramrodpcp/auxiliary-wrapper:$TAG
   - docker tag ramrodpcp/auxiliary-services:test ramrodpcp/auxiliary-services:$TAG
+  - docker images
   - if [[ "$TRAVIS_PULL_REQUEST" == "false" ]]; 
     then echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin; fi
   - if [[ "$TRAVIS_PULL_REQUEST" == "false"  ]]; 
