@@ -10,6 +10,8 @@ RUN apk add fuse
 
 RUN apk add libmagic
 
+RUN apk add supervisor
+
 RUN apk add python3 && \
     python3 -m ensurepip && \
     rm -r /usr/lib/python*/ensurepip && \
@@ -18,6 +20,8 @@ RUN apk add python3 && \
 RUN pip3 install fusepy==2.0.4
 
 RUN pip3 install flask
+
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # Configure openrc
 RUN mkdir /run/openrc && \
@@ -53,4 +57,4 @@ HEALTHCHECK --interval=2s --start-period=10s --retries=3 CMD /bin/sh ./healthche
 
 EXPOSE 20 21 80 10090-10100
 
-ENTRYPOINT /bin/bash /run.sh
+ENTRYPOINT [ "/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
