@@ -36,10 +36,10 @@ COPY ./config/nginx/index.html /www/index.html
 # Set up vsftpd
 COPY ./config/vsftpd/vsftpd.conf /etc/vsftpd/vsftpd.conf
 
-RUN adduser -D -g 'fff' fff && \
-    mkdir /home/fff/files && \
-    chown fff /home/fff/files && \
-    chmod 777 /home/fff
+RUN adduser -D -g 'fff' fff
+RUN mkdir /home/fff/files
+RUN chown fff /home/fff/files
+RUN chmod 777 /home/fff
 
 COPY ./config/run.sh /run.sh
 COPY ./config/brain_filesystem.py /brain_filesystem.py
