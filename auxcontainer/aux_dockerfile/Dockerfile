@@ -10,6 +10,8 @@ RUN apk add fuse
 
 RUN apk add libmagic
 
+RUN apk add supervisor
+
 RUN apk add python3 && \
     python3 -m ensurepip && \
     rm -r /usr/lib/python*/ensurepip && \
@@ -18,6 +20,8 @@ RUN apk add python3 && \
 RUN pip3 install fusepy==2.0.4
 
 RUN pip3 install flask
+
+COPY ./supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # Configure openrc
 RUN mkdir /run/openrc && \
@@ -36,10 +40,13 @@ COPY ./config/nginx/index.html /www/index.html
 # Set up vsftpd
 COPY ./config/vsftpd/vsftpd.conf /etc/vsftpd/vsftpd.conf
 
-RUN adduser -D -g 'fff' fff && \
-    mkdir /home/fff/files && \
-    chown fff /home/fff/files && \
-    chmod 777 /home/fff
+RUN adduser -D -g 'fff' fff
+RUN mkdir /home/fff/files
+RUN chown fff /home/fff/files
+RUN mkdir /home/fff/local
+RUN chown fff /home/fff/local
+RUN chmod 700 /home/fff/local
+RUN chmod 500 /home/fff
 
 COPY ./config/run.sh /run.sh
 COPY ./config/brain_filesystem.py /brain_filesystem.py
@@ -50,4 +57,4 @@ HEALTHCHECK --interval=2s --start-period=10s --retries=3 CMD /bin/sh ./healthche
 
 EXPOSE 20 21 80 10090-10100
 
-ENTRYPOINT /bin/bash /run.sh
+ENTRYPOINT [ "/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
