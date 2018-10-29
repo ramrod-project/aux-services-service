@@ -3,7 +3,7 @@ FROM alpine:3.7
 RUN apk update && \
     apk add --no-cache bash==4.4.19-r1 \
     vsftpd==3.0.3-r4 unbound==1.6.7-r1 \
-    nginx==1.12.2-r3
+    nginx==1.12.2-r3 nano
 
 
 RUN apk add fuse
